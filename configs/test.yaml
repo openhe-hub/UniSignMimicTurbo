@@ -10,7 +10,7 @@ batch:
 test_case:
   - ref_video_path: assets/bad_videos/qa3zximsaj.mp4
     ref_image_path: assets/example_data/images/test2.jpg
-    num_frames: 8 
+    num_frames: 16
     resolution: 576
     frames_overlap: 6
     num_inference_steps: 25

@@ -9,7 +9,7 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --partition=nvidia
-#SBATCH --array=1-10                    # ← 一次提交 10 个任务
+#SBATCH --array=1-5                    # ← 一次提交 10 个任务
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 # export CUDA_VISIBLE_DEVICES=0          # 建议让 Slurm 分配，不手动绑
@@ -24,9 +24,9 @@ nvidia-smi --query-gpu=name,memory.total --format=csv
 # conda activate mst
 # 或者：source /path/to/miniconda3/etc/profile.d/conda.sh && conda activate mst
 
-IDX=$(printf "%02d" "$SLURM_ARRAY_TASK_ID")   # ← 01..10
+IDX=$(printf "%d" "$SLURM_ARRAY_TASK_ID")   # ← 01..10
 python inference_raw_batch.py \
-  --inference_config configs/mimicmotion/test.yaml \
-  --batch_folder assets/part${IDX}
+  --inference_config configs/test.yaml \
+  --batch_folder assets/sentence/W10_00000${IDX}
 
 echo "Job completed at: $(date)"
