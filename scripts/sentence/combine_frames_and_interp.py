@@ -127,9 +127,11 @@ def collect_interp_gifs_for_sentence(
         {index: path}
 
     Files are expected to be named like:
-        vis_gif1.gif, vis_gif2.gif, ...
+        vis_gif1.gif, vis_gif2.gif, ... (format 1)
+        OR
+        0.gif, 1.gif, 2.gif, ... (format 2)
 
-    We interpret vis_gif{i}.gif as the interpolation between
+    We interpret vis_gif{i}.gif or {i-1}.gif as the interpolation between
     ref_ids[i-1] and ref_ids[i] (1-based index).
     """
     mapping: Dict[int, str] = {}
@@ -137,15 +139,25 @@ def collect_interp_gifs_for_sentence(
     if not os.path.isdir(interp_sentence_dir):
         return mapping
 
-    pattern = re.compile(r"vis_gif(\d+)\.gif$", re.IGNORECASE)
+    # Try format 1: vis_gif1.gif, vis_gif2.gif, ...
+    pattern1 = re.compile(r"vis_gif(\d+)\.gif$", re.IGNORECASE)
+    # Try format 2: 0.gif, 1.gif, 2.gif, ...
+    pattern2 = re.compile(r"^(\d+)\.gif$")
 
     for name in os.listdir(interp_sentence_dir):
-        m = pattern.match(name)
-        if not m:
-            continue
-        idx = int(m.group(1))
-        path = os.path.join(interp_sentence_dir, name)
-        mapping[idx] = path
+        m = pattern1.match(name)
+        if m:
+            # Format 1: vis_gif{i}.gif -> index i
+            idx = int(m.group(1))
+            path = os.path.join(interp_sentence_dir, name)
+            mapping[idx] = path
+        else:
+            m = pattern2.match(name)
+            if m:
+                # Format 2: {i}.gif -> index i+1 (convert 0-based to 1-based)
+                idx = int(m.group(1)) + 1
+                path = os.path.join(interp_sentence_dir, name)
+                mapping[idx] = path
 
     return mapping
 

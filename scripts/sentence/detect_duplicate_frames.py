@@ -232,10 +232,10 @@ def save_frames_to_disk(ordered_frames: List[Tuple[int, str, Path]],
     frames_output_dir = output_dir / folder_name
     frames_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy frames with new sequential numbering
-    for new_idx, (orig_frame_id, ref_id, frame_path) in enumerate(frames_to_keep):
-        # Keep original naming format: {new_frame_id}_{ref_id}.jpg
-        new_filename = f"{new_idx}_{ref_id}.jpg"
+    # Copy frames preserving original frame_id to maintain ref_id continuity
+    for orig_frame_id, ref_id, frame_path in frames_to_keep:
+        # Keep original naming format: {orig_frame_id}_{ref_id}.jpg
+        new_filename = f"{orig_frame_id}_{ref_id}.jpg"
         dst_path = frames_output_dir / new_filename
 
         shutil.copy2(frame_path, dst_path)
@@ -686,3 +686,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+#   python scripts/sentence/detect_duplicate_frames.py --frames-dir output/frames_hand_filtered_0.7_v2 --duplicate-threshold 2.0 --min-duplicate-length 3 --boundary-frames 10 --save-cleaned-frames --output-dir output/frames_512x320_cleaned_v2
