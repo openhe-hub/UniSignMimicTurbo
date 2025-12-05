@@ -1,32 +1,27 @@
 import argparse
-import csv
 import os
-from typing import List, Optional
-
-import cv2
+import re
+import shutil
+from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "For each sentence folder of processed mp4s, "
-            "follow CSV ref_ids order (e.g. a,b,c) and extract "
-            "a_end, b_start, b_end, c_start frames as jpg."
+            "For each sentence folder of frame sequences, "
+            "extract boundary frames between ref_ids. "
+            "Input: {frame_id}_{ref_id}.jpg format."
         )
     )
     parser.add_argument(
-        "--csv",
-        type=str,
-        required=True,
-        help="Path to sentences.csv.",
-    )
-    parser.add_argument(
-        "--mp4-root",
+        "--frames-root",
         type=str,
         required=True,
         help=(
-            "Root directory of processed mp4s. "
-            "Expected layout: <mp4-root>/<sentence_id>/{id}_{timestamp}.mp4"
+            "Root directory of frame sequences. "
+            "Expected layout: <frames-root>/<sentence_id>/{frame_id}_{ref_id}.jpg"
         ),
     )
     parser.add_argument(
@@ -34,15 +29,15 @@ def parse_args() -> argparse.Namespace:
         type=str,
         required=True,
         help=(
-            "Root directory to save extracted frames. "
+            "Root directory to save extracted boundary frames. "
             "Frames will be saved under <out-root>/<sentence_id>/."
         ),
     )
     parser.add_argument(
-        "--num",
-        type=int,
+        "--subfolder",
+        type=str,
         default=None,
-        help="Optional: only process the first N sentences in the CSV.",
+        help="Optional: specific subfolder to process.",
     )
     return parser.parse_args()
 
@@ -51,191 +46,137 @@ def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def parse_ref_ids(raw: str) -> List[str]:
+def parse_filename(filename: str) -> Tuple[int, str]:
     """
-    Parse the ref_ids field into a list of ids.
-    Skip placeholder tokens like 'NO_REF_xxx'.
+    Extract frame_id and ref_id from filename like '0_vkhwescgz9.jpg'
+    Returns: (frame_id, ref_id)
     """
-    if not raw:
-        return []
-    parts = [p.strip() for p in raw.split(",")]
-    return [p for p in parts if p and not p.startswith("NO_REF")]
+    match = re.match(r"(\d+)_([^.]+)\.jpg", filename)
+    if match:
+        return int(match.group(1)), match.group(2)
+    return -1, ""
 
 
-def find_mp4_for_id(sentence_dir: str, ref_id: str) -> Optional[str]:
+def get_frames_by_ref(folder: Path) -> Dict[str, List[Tuple[int, Path]]]:
     """
-    Find the mp4 file for a given ref_id within a sentence folder.
-
-    We expect filenames like '{ref_id}_{timestamp}.mp4'.
-    If multiple candidates exist, the lexicographically smallest is chosen.
+    Group frames by ref_id and sort by frame_id within each group.
+    Returns: {ref_id: [(frame_id, path), ...]}
     """
-    if not os.path.isdir(sentence_dir):
-        return None
+    ref_groups = defaultdict(list)
 
-    candidates: List[str] = []
-    for name in os.listdir(sentence_dir):
-        if not name.lower().endswith(".mp4"):
-            continue
-        if not name.startswith(ref_id + "_"):
-            continue
-        candidates.append(name)
+    for f in folder.glob("*.jpg"):
+        frame_id, ref_id = parse_filename(f.name)
+        if frame_id >= 0 and ref_id:
+            ref_groups[ref_id].append((frame_id, f))
 
-    if not candidates:
-        return None
+    # Sort each group by frame_id
+    for ref_id in ref_groups:
+        ref_groups[ref_id].sort(key=lambda x: x[0])
 
-    candidates.sort()
-    return os.path.join(sentence_dir, candidates[0])
+    return ref_groups
 
 
-def extract_frame(
-    video_path: str,
-    which: str,
-) -> Optional[any]:
+def get_ordered_ref_ids(ref_groups: Dict[str, List[Tuple[int, Path]]]) -> List[str]:
     """
-    Extract first or last frame from a video.
-
-    which: 'start' or 'end'
+    Get ref_ids ordered by the first frame_id appearance.
+    Returns: [ref_id1, ref_id2, ...]
     """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print(f"[WARN] Failed to open video: {video_path}")
-        return None
+    ref_with_first_frame = []
+    for ref_id, frames in ref_groups.items():
+        if frames:
+            first_frame_id = frames[0][0]
+            ref_with_first_frame.append((first_frame_id, ref_id))
 
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    if frame_count <= 0:
-        print(f"[WARN] Video has no frames: {video_path}")
-        cap.release()
-        return None
-
-    if which == "start":
-        target_idx = 0
-    elif which == "end":
-        target_idx = max(frame_count - 1, 0)
-    else:
-        cap.release()
-        raise ValueError(f"Invalid 'which' value: {which}")
-
-    cap.set(cv2.CAP_PROP_POS_FRAMES, target_idx)
-    ok, frame = cap.read()
-    cap.release()
-
-    if not ok or frame is None:
-        print(f"[WARN] Failed to read frame {target_idx} from {video_path}")
-        return None
-
-    return frame
+    ref_with_first_frame.sort(key=lambda x: x[0])
+    return [ref_id for _, ref_id in ref_with_first_frame]
 
 
-def process_sentence(
-    sentence_id: str,
-    ref_ids: List[str],
-    mp4_root: str,
-    out_root: str,
-) -> None:
+def process_sentence_folder(sentence_folder: Path, out_root: Path) -> None:
     """
-    For a given sentence and its ordered ref_ids list (e.g., [a, b, c]),
-    extract frames:
-      - a_end
-      - b_start, b_end
-      - c_start
-    and save them as jpgs in <out-root>/<sentence_id>/.
+    Process a single sentence folder and extract boundary frames.
+
+    For ref_ids = [a, b, c], extracts:
+      - Boundary 0: a→b (0_start.jpg from a's last frame, 0_end.jpg from b's first frame)
+      - Boundary 1: b→c (1_start.jpg from b's last frame, 1_end.jpg from c's first frame)
     """
-    if not ref_ids:
+    sentence_id = sentence_folder.name
+    print(f"Processing: {sentence_id}")
+
+    # Get frames grouped by ref_id
+    ref_groups = get_frames_by_ref(sentence_folder)
+
+    if len(ref_groups) < 2:
+        print(f"  [WARN] Only {len(ref_groups)} ref_id(s) found, skipping (need at least 2).")
         return
 
-    sentence_dir = os.path.join(mp4_root, sentence_id)
-    out_dir = os.path.join(out_root, sentence_id)
-    ensure_dir(out_dir)
+    # Get ordered ref_ids
+    ordered_ref_ids = get_ordered_ref_ids(ref_groups)
+    print(f"  Found {len(ordered_ref_ids)} ref_ids: {ordered_ref_ids}")
 
-    # Map ref_id -> its mp4 path (if exists)
-    video_paths: List[Optional[str]] = []
-    for ref_id in ref_ids:
-        path = find_mp4_for_id(sentence_dir, ref_id)
-        if path is None:
-            print(
-                f"[WARN] No mp4 found for ref_id={ref_id} "
-                f"in sentence_id={sentence_id}"
-            )
-        video_paths.append(path)
+    # Create output directory
+    out_dir = out_root / sentence_id
+    ensure_dir(str(out_dir))
 
-    n = len(ref_ids)
-    for i, ref_id in enumerate(ref_ids):
-        video_path = video_paths[i]
-        if video_path is None:
-            continue
+    # Extract boundaries
+    num_boundaries = len(ordered_ref_ids) - 1
+    for boundary_idx in range(num_boundaries):
+        prev_ref_id = ordered_ref_ids[boundary_idx]
+        next_ref_id = ordered_ref_ids[boundary_idx + 1]
 
-        # First element: only end frame
-        if i == 0 and n == 1:
-            # Only one element: both start and end could be useful;
-            # but follow the described pattern: only end for first,
-            # only start for last. For a single element, we save both.
-            frame_start = extract_frame(video_path, "start")
-            frame_end = extract_frame(video_path, "end")
+        prev_frames = ref_groups[prev_ref_id]
+        next_frames = ref_groups[next_ref_id]
 
-            if frame_start is not None:
-                out_path = os.path.join(out_dir, f"{ref_id}_start.jpg")
-                cv2.imwrite(out_path, frame_start)
-            if frame_end is not None:
-                out_path = os.path.join(out_dir, f"{ref_id}_end.jpg")
-                cv2.imwrite(out_path, frame_end)
-        elif i == 0:
-            frame_end = extract_frame(video_path, "end")
-            if frame_end is not None:
-                out_path = os.path.join(out_dir, f"{ref_id}_end.jpg")
-                cv2.imwrite(out_path, frame_end)
-        # Last element: only start frame
-        elif i == n - 1:
-            frame_start = extract_frame(video_path, "start")
-            if frame_start is not None:
-                out_path = os.path.join(out_dir, f"{ref_id}_start.jpg")
-                cv2.imwrite(out_path, frame_start)
-        # Middle elements: both start and end
-        else:
-            frame_start = extract_frame(video_path, "start")
-            frame_end = extract_frame(video_path, "end")
+        # Get last frame of previous ref_id
+        if prev_frames:
+            last_frame_path = prev_frames[-1][1]
+            out_path = out_dir / f"{boundary_idx}_start.jpg"
+            shutil.copy2(last_frame_path, out_path)
+            print(f"    Boundary {boundary_idx}: {prev_ref_id}→{next_ref_id}")
+            print(f"      {boundary_idx}_start.jpg ← {last_frame_path.name}")
 
-            if frame_start is not None:
-                out_path = os.path.join(out_dir, f"{ref_id}_start.jpg")
-                cv2.imwrite(out_path, frame_start)
-            if frame_end is not None:
-                out_path = os.path.join(out_dir, f"{ref_id}_end.jpg")
-                cv2.imwrite(out_path, frame_end)
+        # Get first frame of next ref_id
+        if next_frames:
+            first_frame_path = next_frames[0][1]
+            out_path = out_dir / f"{boundary_idx}_end.jpg"
+            shutil.copy2(first_frame_path, out_path)
+            print(f"      {boundary_idx}_end.jpg ← {first_frame_path.name}")
+
+    print(f"  Extracted {num_boundaries} boundaries.")
 
 
 def main() -> None:
     args = parse_args()
 
-    csv_path = os.path.abspath(args.csv)
-    mp4_root = os.path.abspath(args.mp4_root)
-    out_root = os.path.abspath(args.out_root)
+    frames_root = Path(args.frames_root)
+    out_root = Path(args.out_root)
 
-    if not os.path.isfile(csv_path):
-        raise FileNotFoundError(f"CSV not found: {csv_path}")
-    if not os.path.isdir(mp4_root):
-        raise NotADirectoryError(f"mp4-root not found: {mp4_root}")
-    ensure_dir(out_root)
+    if not frames_root.exists():
+        raise FileNotFoundError(f"frames-root not found: {frames_root}")
 
+    ensure_dir(str(out_root))
+
+    # Determine which folders to process
+    if args.subfolder:
+        folders = [frames_root / args.subfolder]
+        if not folders[0].exists():
+            raise FileNotFoundError(f"Subfolder not found: {folders[0]}")
+    else:
+        folders = [d for d in frames_root.iterdir() if d.is_dir()]
+
+    if not folders:
+        print("No folders found to process.")
+        return
+
+    print(f"Found {len(folders)} folder(s) to process.\n")
+
+    # Process each folder
     processed_count = 0
-    # Use utf-8-sig to handle CSV files that may have a BOM.
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row_idx, row in enumerate(reader):
-            if args.num is not None and processed_count >= args.num:
-                break
+    for folder in sorted(folders):
+        process_sentence_folder(folder, out_root)
+        processed_count += 1
+        print()
 
-            sentence_id = row.get("sentence_id")
-            ref_ids_raw = row.get("ref_ids", "")
-            if not sentence_id:
-                continue
-
-            ref_ids = parse_ref_ids(ref_ids_raw)
-            if not ref_ids:
-                continue
-
-            process_sentence(sentence_id, ref_ids, mp4_root, out_root)
-            processed_count += 1
-
-    print(f"Done. Processed {processed_count} sentences into '{out_root}'.")
+    print(f"Done. Processed {processed_count} sentence(s) into '{out_root}'.")
 
 
 if __name__ == "__main__":
