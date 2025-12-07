@@ -119,4 +119,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# python scripts/sentence/split_sentence.py --csv assets/sentence/sentence.csv --mp4-dir assets/Asl --out-dir assets/sentence/ --num 5
+# python scripts/sentence/split_sentence_mp4.py --csv assets/sentence/sentences.csv --mp4-dir assets/Asl --out-dir output/sentence_level/sentences --num 5

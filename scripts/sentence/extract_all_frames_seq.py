@@ -177,4 +177,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# python .\scripts\sentence\extract_all_frames_seq.py --csv .\assets\sentence\sentences.csv --mp4-root .\output\sentence\ --out-root .\output\frames\ --num 5
+# python scripts/sentence/extract_all_frames_seq.py --csv assets/sentence/sentences.csv --mp4-root output/sentence_level/sentences --out-root output/sentence_level/frames --num 5
