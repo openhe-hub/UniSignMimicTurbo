@@ -1,11 +1,18 @@
 import argparse
-import os
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
+
+
+@dataclass(frozen=True)
+class FrameRecord:
+    frame_id: int
+    ref_id: str
+    path: Path
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,10 +55,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def ensure_dir(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
-
-
 def parse_filename(filename: str) -> Tuple[int, str]:
     """
     Extract frame_id and ref_id from filename like '0_vkhwescgz9.jpg'
@@ -63,27 +66,40 @@ def parse_filename(filename: str) -> Tuple[int, str]:
     return -1, ""
 
 
-def get_frames_by_ref(folder: Path) -> Dict[str, List[Tuple[int, Path]]]:
+def get_frames_by_ref(folder: Path) -> Dict[str, List[FrameRecord]]:
     """
     Group frames by ref_id and sort by frame_id within each group.
     Returns: {ref_id: [(frame_id, path), ...]}
     """
-    ref_groups = defaultdict(list)
+    ref_groups: Dict[str, List[FrameRecord]] = defaultdict(list)
 
-    for f in folder.glob("*.jpg"):
-        frame_id, ref_id = parse_filename(f.name)
+    for frame_file in folder.glob("*.jpg"):
+        frame_id, ref_id = parse_filename(frame_file.name)
         if frame_id >= 0 and ref_id:
-            ref_groups[ref_id].append((frame_id, f))
+            ref_groups[ref_id].append(FrameRecord(frame_id, ref_id, frame_file))
 
-    # Sort each group by frame_id
     for ref_id in ref_groups:
-        ref_groups[ref_id].sort(key=lambda x: x[0])
+        ref_groups[ref_id].sort(key=lambda rec: rec.frame_id)
 
     return ref_groups
 
 
+def ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def get_sentence_folders(frames_root: Path, subfolder: Optional[str]) -> List[Path]:
+    if subfolder:
+        target = frames_root / subfolder
+        if not target.exists():
+            raise FileNotFoundError(f"Subfolder not found: {target}")
+        return [target]
+
+    return [d for d in frames_root.iterdir() if d.is_dir()]
+
+
 def generate_word_video(
-    frames: List[Tuple[int, Path]], output_path: Path, fps: int = 25
+    frames: List[FrameRecord], output_path: Path, fps: int = 25
 ) -> bool:
     """
     Generate a video from a list of frames.
@@ -101,7 +117,7 @@ def generate_word_video(
         return False
 
     # Read first frame to get dimensions
-    first_frame = cv2.imread(str(frames[0][1]))
+    first_frame = cv2.imread(str(frames[0].path))
     if first_frame is None:
         print(f"    [ERROR] Could not read first frame: {frames[0][1]}")
         return False
@@ -118,13 +134,13 @@ def generate_word_video(
 
     # Write all frames
     frame_count = 0
-    for frame_id, frame_path in frames:
-        frame = cv2.imread(str(frame_path))
+    for frame_record in frames:
+        frame = cv2.imread(str(frame_record.path))
         if frame is not None:
             out.write(frame)
             frame_count += 1
         else:
-            print(f"    [WARN] Could not read frame: {frame_path}")
+            print(f"    [WARN] Could not read frame: {frame_record.path}")
 
     out.release()
 
@@ -149,7 +165,7 @@ def process_sentence_folder(
 
     # Create output directory for this sentence
     sentence_out_dir = out_root / sentence_id
-    ensure_dir(str(sentence_out_dir))
+    ensure_dir(sentence_out_dir)
 
     # Group frames by ref_id (each ref_id is a word)
     ref_groups = get_frames_by_ref(sentence_folder)
@@ -184,15 +200,10 @@ def main() -> None:
     if not frames_root.exists():
         raise FileNotFoundError(f"frames-root not found: {frames_root}")
 
-    ensure_dir(str(out_root))
+    ensure_dir(out_root)
 
     # Determine which folders to process
-    if args.subfolder:
-        folders = [frames_root / args.subfolder]
-        if not folders[0].exists():
-            raise FileNotFoundError(f"Subfolder not found: {folders[0]}")
-    else:
-        folders = [d for d in frames_root.iterdir() if d.is_dir()]
+    folders = get_sentence_folders(frames_root, args.subfolder)
 
     if not folders:
         print("No folders found to process.")

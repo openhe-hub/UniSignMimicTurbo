@@ -1,10 +1,10 @@
 import argparse
-import os
 import re
 import shutil
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,8 +48,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def ensure_dir(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
+@dataclass(frozen=True)
+class FrameRecord:
+    frame_id: int
+    ref_id: str
+    path: Path
 
 
 def parse_filename(filename: str) -> Tuple[int, str]:
@@ -63,23 +66,47 @@ def parse_filename(filename: str) -> Tuple[int, str]:
     return -1, ""
 
 
-def get_frames_by_ref(folder: Path) -> Dict[str, List[Tuple[int, Path]]]:
+def get_frames_by_ref(folder: Path) -> Dict[str, List[FrameRecord]]:
     """
     Group frames by ref_id and sort by frame_id within each group.
     Returns: {ref_id: [(frame_id, path), ...]}
     """
-    ref_groups = defaultdict(list)
+    ref_groups: Dict[str, List[FrameRecord]] = defaultdict(list)
 
-    for f in folder.glob("*.jpg"):
-        frame_id, ref_id = parse_filename(f.name)
+    for frame_file in folder.glob("*.jpg"):
+        frame_id, ref_id = parse_filename(frame_file.name)
         if frame_id >= 0 and ref_id:
-            ref_groups[ref_id].append((frame_id, f))
+            ref_groups[ref_id].append(FrameRecord(frame_id, ref_id, frame_file))
 
-    # Sort each group by frame_id
     for ref_id in ref_groups:
-        ref_groups[ref_id].sort(key=lambda x: x[0])
+        ref_groups[ref_id].sort(key=lambda rec: rec.frame_id)
 
     return ref_groups
+
+
+def ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def get_sentence_folders(frames_root: Path, subfolder: Optional[str]) -> List[Path]:
+    if subfolder:
+        target = frames_root / subfolder
+        if not target.exists():
+            raise FileNotFoundError(f"Subfolder not found: {target}")
+        return [target]
+
+    return [d for d in frames_root.iterdir() if d.is_dir()]
+
+
+def copy_boundary_pairs(ref_id: str, first_frame: Path, last_frame: Path,
+                        ref_image_path: Path, out_dir: Path) -> None:
+    # Pair 0: ref image -> first frame of word
+    shutil.copy2(ref_image_path, out_dir / f"{ref_id}_0_start.jpg")
+    shutil.copy2(first_frame, out_dir / f"{ref_id}_0_end.jpg")
+
+    # Pair 1: last frame of word -> ref image
+    shutil.copy2(last_frame, out_dir / f"{ref_id}_1_start.jpg")
+    shutil.copy2(ref_image_path, out_dir / f"{ref_id}_1_end.jpg")
 
 
 def process_sentence_folder(sentence_folder: Path, ref_image_path: Path, out_root: Path) -> int:
@@ -97,7 +124,7 @@ def process_sentence_folder(sentence_folder: Path, ref_image_path: Path, out_roo
 
     # Create output directory for this sentence
     sentence_out_dir = out_root / sentence_id
-    ensure_dir(str(sentence_out_dir))
+    ensure_dir(sentence_out_dir)
 
     # Group frames by ref_id (each ref_id is a word)
     ref_groups = get_frames_by_ref(sentence_folder)
@@ -113,24 +140,13 @@ def process_sentence_folder(sentence_folder: Path, ref_image_path: Path, out_roo
         if not frames:
             continue
 
-        # Get first and last frame for this word
-        first_frame = frames[0][1]
-        last_frame = frames[-1][1]
+        first_frame = frames[0].path
+        last_frame = frames[-1].path
 
         print(f"  Word [{ref_id}]: {len(frames)} frames")
         print(f"    First: {first_frame.name}, Last: {last_frame.name}")
 
-        # Pair 0: ref -> word (入场)
-        # {ref_id}_0_start.jpg = ref image
-        # {ref_id}_0_end.jpg = first frame
-        shutil.copy2(ref_image_path, sentence_out_dir / f"{ref_id}_0_start.jpg")
-        shutil.copy2(first_frame, sentence_out_dir / f"{ref_id}_0_end.jpg")
-
-        # Pair 1: word -> ref (退场)
-        # {ref_id}_1_start.jpg = last frame
-        # {ref_id}_1_end.jpg = ref image
-        shutil.copy2(last_frame, sentence_out_dir / f"{ref_id}_1_start.jpg")
-        shutil.copy2(ref_image_path, sentence_out_dir / f"{ref_id}_1_end.jpg")
+        copy_boundary_pairs(ref_id, first_frame, last_frame, ref_image_path, sentence_out_dir)
 
         word_count += 1
 
@@ -153,15 +169,10 @@ def main() -> None:
 
     print(f"Using reference image: {ref_image_path}\n")
 
-    ensure_dir(str(out_root))
+    ensure_dir(out_root)
 
     # Determine which folders to process
-    if args.subfolder:
-        folders = [frames_root / args.subfolder]
-        if not folders[0].exists():
-            raise FileNotFoundError(f"Subfolder not found: {folders[0]}")
-    else:
-        folders = [d for d in frames_root.iterdir() if d.is_dir()]
+    folders = get_sentence_folders(frames_root, args.subfolder)
 
     if not folders:
         print("No folders found to process.")
