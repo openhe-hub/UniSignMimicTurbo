@@ -122,3 +122,5 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
+# python scripts/sentence/crop_resize_frames.py --in-root output/frames --out-root output/frames_512x320
+

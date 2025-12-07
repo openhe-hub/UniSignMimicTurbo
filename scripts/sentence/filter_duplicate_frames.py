@@ -1,9 +1,9 @@
 import argparse
-import os
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import matplotlib.pyplot as plt
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--min-duplicate-length",
         type=int,
-        default=3,
+        default=2,
         help="Minimum number of consecutive duplicate frames to report (default: 3).",
     )
     parser.add_argument(
@@ -69,6 +69,47 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+@dataclass(frozen=True)
+class FrameData:
+    frame_id: int
+    ref_id: str
+    path: Path
+
+
+@dataclass
+class SegmentAnalysis:
+    ref_id: str
+    num_frames: int
+    frame_ids: List[int]
+    differences: List[float]
+    duplicate_sequences: List[Tuple[int, int]]
+    total_duplicates: int
+    mean_diff: float
+    min_diff: float
+    max_diff: float
+    start_duplicates: int
+    end_duplicates: int
+    start_region_size: int
+    end_region_size: int
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            'ref_id': self.ref_id,
+            'num_frames': self.num_frames,
+            'frame_ids': self.frame_ids,
+            'differences': self.differences,
+            'duplicate_sequences': self.duplicate_sequences,
+            'total_duplicates': self.total_duplicates,
+            'mean_diff': self.mean_diff,
+            'min_diff': self.min_diff,
+            'max_diff': self.max_diff,
+            'start_duplicates': self.start_duplicates,
+            'end_duplicates': self.end_duplicates,
+            'start_region_size': self.start_region_size,
+            'end_region_size': self.end_region_size,
+        }
+
+
 def parse_filename(filename: str) -> Tuple[int, str]:
     """
     Extract frame_id and ref_id from filename like '0_vkhwescgz9.jpg'
@@ -80,37 +121,36 @@ def parse_filename(filename: str) -> Tuple[int, str]:
     return -1, ""
 
 
-def get_frames_by_ref(folder: Path) -> Dict[str, List[Tuple[int, Path]]]:
+def get_frames_by_ref(folder: Path) -> Dict[str, List[FrameData]]:
     """
     Group frames by ref_id and sort by frame_id within each group.
-    Returns: {ref_id: [(frame_id, path), ...]}
+    Returns: {ref_id: [FrameData, ...]}
     """
-    ref_groups = defaultdict(list)
+    ref_groups: Dict[str, List[FrameData]] = defaultdict(list)
 
     for f in folder.glob("*.jpg"):
         frame_id, ref_id = parse_filename(f.name)
         if frame_id >= 0 and ref_id:
-            ref_groups[ref_id].append((frame_id, f))
+            ref_groups[ref_id].append(FrameData(frame_id, ref_id, f))
 
-    # Sort each group by frame_id
     for ref_id in ref_groups:
-        ref_groups[ref_id].sort(key=lambda x: x[0])
+        ref_groups[ref_id].sort(key=lambda frame: frame.frame_id)
 
     return ref_groups
 
 
-def get_ordered_frames(folder: Path) -> List[Tuple[int, str, Path]]:
+def get_ordered_frames(folder: Path) -> List[FrameData]:
     """
     Get all frames sorted by frame_id.
-    Returns: [(frame_id, ref_id, path), ...]
+    Returns: [FrameData, ...]
     """
-    frames = []
+    frames: List[FrameData] = []
     for f in folder.glob("*.jpg"):
         frame_id, ref_id = parse_filename(f.name)
         if frame_id >= 0 and ref_id:
-            frames.append((frame_id, ref_id, f))
+            frames.append(FrameData(frame_id, ref_id, f))
 
-    frames.sort(key=lambda x: x[0])
+    frames.sort(key=lambda frame: frame.frame_id)
     return frames
 
 
@@ -138,35 +178,86 @@ def calculate_frame_difference_percent(frame1: np.ndarray, frame2: np.ndarray) -
     return (changed_pixels / total_pixels) * 100
 
 
-def generate_cleaned_video(ordered_frames: List[Tuple[int, str, Path]],
-                          differences: List[float], threshold: float,
-                          folder_name: str, output_dir: Path, fps: int = 25) -> None:
+def compute_frame_differences(frames: List[FrameData]) -> List[float]:
+    """
+    Compute pixel difference percentage between consecutive frames.
+    Returns a list with length len(frames) - 1.
+    """
+    differences: List[float] = []
+
+    prev_img = cv2.imread(str(frames[0].path))
+    for frame in frames[1:]:
+        curr_img = cv2.imread(str(frame.path))
+        differences.append(calculate_frame_difference_percent(prev_img, curr_img))
+        prev_img = curr_img
+
+    return differences
+
+
+def select_frames_to_keep(ordered_frames: List[FrameData], differences: List[float], threshold: float) -> List[FrameData]:
+    """
+    Determine which frames to keep based on the difference threshold.
+    Always keeps the first frame.
+    """
+    frames_to_keep: List[FrameData] = [ordered_frames[0]]
+
+    for diff, frame in zip(differences, ordered_frames[1:]):
+        if diff >= threshold:
+            frames_to_keep.append(frame)
+
+    return frames_to_keep
+
+
+def build_ordered_frame_data(ordered_frames: List[FrameData], progress_interval: int = 100) -> List[dict]:
+    """
+    Build per-frame difference data for the full ordered sequence.
+    """
+    ordered_frame_data: List[dict] = []
+    prev_frame = ordered_frames[0]
+    prev_img = cv2.imread(str(prev_frame.path))
+    prev_ref_id = prev_frame.ref_id
+
+    for idx, curr_frame in enumerate(ordered_frames[1:], start=1):
+        curr_img = cv2.imread(str(curr_frame.path))
+        diff = calculate_frame_difference_percent(prev_img, curr_img)
+        ordered_frame_data.append({
+            'frame_id': curr_frame.frame_id,
+            'ref_id': curr_frame.ref_id,
+            'difference': diff,
+            'is_boundary': prev_ref_id != curr_frame.ref_id
+        })
+
+        prev_img = curr_img
+        prev_ref_id = curr_frame.ref_id
+
+        if progress_interval and (idx + 1) % progress_interval == 0:
+            print(f"  Processed {idx + 1}/{len(ordered_frames)} frames...")
+
+    return ordered_frame_data
+
+
+def generate_cleaned_video(ordered_frames: List[FrameData], differences: List[float],
+                          threshold: float, folder_name: str, output_dir: Path,
+                          fps: int = 25) -> None:
     """
     Generate a video with duplicate frames removed.
 
     Args:
-        ordered_frames: List of (frame_id, ref_id, path) tuples
+        ordered_frames: Ordered frames with ids/ref ids/paths
         differences: List of frame difference percentages
         threshold: Threshold below which frames are considered duplicates
         folder_name: Name of the folder being processed
         output_dir: Output directory for the video
         fps: Frames per second for output video
     """
-    # Determine which frames to keep
-    # Always keep the first frame
-    frames_to_keep = [ordered_frames[0]]
-
-    # For subsequent frames, only keep if difference >= threshold
-    for i, diff in enumerate(differences):
-        if diff >= threshold:
-            frames_to_keep.append(ordered_frames[i + 1])
+    frames_to_keep = select_frames_to_keep(ordered_frames, differences, threshold)
 
     if len(frames_to_keep) < 2:
         print(f"  Warning: Only {len(frames_to_keep)} frames would remain after filtering. Skipping video generation.")
         return
 
     # Read first frame to get dimensions
-    first_frame = cv2.imread(str(frames_to_keep[0][2]))
+    first_frame = cv2.imread(str(frames_to_keep[0].path))
     if first_frame is None:
         print(f"  Error: Could not read first frame. Skipping video generation.")
         return
@@ -183,8 +274,8 @@ def generate_cleaned_video(ordered_frames: List[Tuple[int, str, Path]],
         return
 
     # Write frames
-    for frame_id, ref_id, frame_path in frames_to_keep:
-        frame = cv2.imread(str(frame_path))
+    for frame_data in frames_to_keep:
+        frame = cv2.imread(str(frame_data.path))
         if frame is not None:
             out.write(frame)
 
@@ -200,14 +291,13 @@ def generate_cleaned_video(ordered_frames: List[Tuple[int, str, Path]],
     print(f"    Removed frames: {removed_count} ({100*removed_count/original_count:.1f}%)")
 
 
-def save_frames_to_disk(ordered_frames: List[Tuple[int, str, Path]],
-                       differences: List[float], threshold: float,
-                       folder_name: str, output_dir: Path) -> None:
+def save_frames_to_disk(ordered_frames: List[FrameData], differences: List[float],
+                       threshold: float, folder_name: str, output_dir: Path) -> None:
     """
     Save cleaned frames (without duplicates) to a new directory.
 
     Args:
-        ordered_frames: List of (frame_id, ref_id, path) tuples
+        ordered_frames: Ordered frames with ids/ref ids/paths
         differences: List of frame difference percentages
         threshold: Threshold below which frames are considered duplicates
         folder_name: Name of the folder being processed
@@ -215,14 +305,7 @@ def save_frames_to_disk(ordered_frames: List[Tuple[int, str, Path]],
     """
     import shutil
 
-    # Determine which frames to keep
-    # Always keep the first frame
-    frames_to_keep = [ordered_frames[0]]
-
-    # For subsequent frames, only keep if difference >= threshold
-    for i, diff in enumerate(differences):
-        if diff >= threshold:
-            frames_to_keep.append(ordered_frames[i + 1])
+    frames_to_keep = select_frames_to_keep(ordered_frames, differences, threshold)
 
     if len(frames_to_keep) < 2:
         print(f"  Warning: Only {len(frames_to_keep)} frames would remain after filtering. Skipping frame saving.")
@@ -233,12 +316,11 @@ def save_frames_to_disk(ordered_frames: List[Tuple[int, str, Path]],
     frames_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy frames preserving original frame_id to maintain ref_id continuity
-    for orig_frame_id, ref_id, frame_path in frames_to_keep:
-        # Keep original naming format: {orig_frame_id}_{ref_id}.jpg
-        new_filename = f"{orig_frame_id}_{ref_id}.jpg"
+    for frame_data in frames_to_keep:
+        new_filename = f"{frame_data.frame_id}_{frame_data.ref_id}.jpg"
         dst_path = frames_output_dir / new_filename
 
-        shutil.copy2(frame_path, dst_path)
+        shutil.copy2(frame_data.path, dst_path)
 
     original_count = len(ordered_frames)
     cleaned_count = len(frames_to_keep)
@@ -278,50 +360,40 @@ def find_duplicate_sequences(differences: List[float], threshold: float, min_len
     return sequences
 
 
-def analyze_ref_segment(ref_id: str, frames: List[Tuple[int, Path]],
-                       threshold: float, min_dup_length: int, boundary_frames: int) -> dict:
+def analyze_ref_segment(ref_id: str, frames: List[FrameData],
+                       threshold: float, min_dup_length: int, boundary_frames: int) -> Optional[SegmentAnalysis]:
     """
     Analyze a single ref_id segment for duplicate frames.
     """
     if len(frames) < 2:
         return None
 
-    frame_ids = [f[0] for f in frames]
-    differences = []
+    frame_ids = [frame.frame_id for frame in frames]
+    differences = compute_frame_differences(frames)
 
-    # Calculate differences between consecutive frames
-    prev_img = cv2.imread(str(frames[0][1]))
-    for i in range(1, len(frames)):
-        curr_img = cv2.imread(str(frames[i][1]))
-        diff = calculate_frame_difference_percent(prev_img, curr_img)
-        differences.append(diff)
-        prev_img = curr_img
-
-    # Find duplicate sequences
     dup_sequences = find_duplicate_sequences(differences, threshold, min_dup_length)
 
-    # Analyze boundary regions
     start_region_diffs = differences[:min(boundary_frames, len(differences))]
     end_region_diffs = differences[-min(boundary_frames, len(differences)):]
 
     start_duplicates = sum(1 for d in start_region_diffs if d < threshold)
     end_duplicates = sum(1 for d in end_region_diffs if d < threshold)
 
-    return {
-        'ref_id': ref_id,
-        'num_frames': len(frames),
-        'frame_ids': frame_ids[1:],  # Align with differences array
-        'differences': differences,
-        'duplicate_sequences': dup_sequences,
-        'total_duplicates': sum(1 for d in differences if d < threshold),
-        'mean_diff': np.mean(differences),
-        'min_diff': np.min(differences),
-        'max_diff': np.max(differences),
-        'start_duplicates': start_duplicates,
-        'end_duplicates': end_duplicates,
-        'start_region_size': len(start_region_diffs),
-        'end_region_size': len(end_region_diffs)
-    }
+    return SegmentAnalysis(
+        ref_id=ref_id,
+        num_frames=len(frames),
+        frame_ids=frame_ids[1:],  # Align with differences array
+        differences=differences,
+        duplicate_sequences=dup_sequences,
+        total_duplicates=sum(1 for d in differences if d < threshold),
+        mean_diff=float(np.mean(differences)),
+        min_diff=float(np.min(differences)),
+        max_diff=float(np.max(differences)),
+        start_duplicates=start_duplicates,
+        end_duplicates=end_duplicates,
+        start_region_size=len(start_region_diffs),
+        end_region_size=len(end_region_diffs),
+    )
 
 
 def analyze_folder(folder: Path, threshold: float, min_dup_length: int,
@@ -344,35 +416,13 @@ def analyze_folder(folder: Path, threshold: float, min_dup_length: int,
     print(f"  Number of ref_id segments: {len(ref_groups)}")
 
     # Analyze each ref_id segment
-    segment_results = []
-    for ref_id, frames in sorted(ref_groups.items(), key=lambda x: x[1][0][0]):
+    segment_analyses: List[SegmentAnalysis] = []
+    for ref_id, frames in sorted(ref_groups.items(), key=lambda x: x[1][0].frame_id):
         result = analyze_ref_segment(ref_id, frames, threshold, min_dup_length, boundary_frames)
         if result:
-            segment_results.append(result)
+            segment_analyses.append(result)
 
-    # Calculate overall statistics
-    ordered_frame_data = []
-    prev_frame_id, prev_ref_id, prev_path = ordered_frames[0]
-    prev_img = cv2.imread(str(prev_path))
-    is_boundary = []
-
-    for i in range(1, len(ordered_frames)):
-        curr_frame_id, curr_ref_id, curr_path = ordered_frames[i]
-        curr_img = cv2.imread(str(curr_path))
-
-        diff = calculate_frame_difference_percent(prev_img, curr_img)
-        ordered_frame_data.append({
-            'frame_id': curr_frame_id,
-            'ref_id': curr_ref_id,
-            'difference': diff,
-            'is_boundary': prev_ref_id != curr_ref_id
-        })
-
-        prev_img = curr_img
-        prev_ref_id = curr_ref_id
-
-        if (i + 1) % 100 == 0:
-            print(f"  Processed {i + 1}/{len(ordered_frames)} frames...")
+    ordered_frame_data = build_ordered_frame_data(ordered_frames)
 
     # Summary statistics
     print(f"\n  Per-segment analysis (duplicate threshold: {threshold}%):")
@@ -384,22 +434,22 @@ def analyze_folder(folder: Path, threshold: float, min_dup_length: int,
     total_dup_sequences = 0
     boundary_duplicates = 0
 
-    for result in segment_results:
-        print(f"  {result['ref_id']:<15} {result['num_frames']:<8} "
-              f"{result['total_duplicates']:<12} "
-              f"{result['start_duplicates']}/{result['start_region_size']:<8} "
-              f"{result['end_duplicates']}/{result['end_region_size']:<6} "
-              f"{result['mean_diff']:<10.2f}%")
+    for result in segment_analyses:
+        print(f"  {result.ref_id:<15} {result.num_frames:<8} "
+              f"{result.total_duplicates:<12} "
+              f"{result.start_duplicates}/{result.start_region_size:<8} "
+              f"{result.end_duplicates}/{result.end_region_size:<6} "
+              f"{result.mean_diff:<10.2f}%")
 
-        if result['duplicate_sequences']:
-            for seq_start, seq_end in result['duplicate_sequences']:
+        if result.duplicate_sequences:
+            for seq_start, seq_end in result.duplicate_sequences:
                 seq_len = seq_end - seq_start + 1
-                frame_range = f"{result['frame_ids'][seq_start]}-{result['frame_ids'][seq_end]}"
-                print(f"    → Duplicate sequence: frames {frame_range} (length: {seq_len})")
+                frame_range = f"{result.frame_ids[seq_start]}-{result.frame_ids[seq_end]}"
+                print(f"    -> Duplicate sequence: frames {frame_range} (length: {seq_len})")
 
-        total_frames += len(result['differences'])
-        total_duplicates += result['total_duplicates']
-        total_dup_sequences += len(result['duplicate_sequences'])
+        total_frames += len(result.differences)
+        total_duplicates += result.total_duplicates
+        total_dup_sequences += len(result.duplicate_sequences)
 
     # Count boundary duplicates
     for data in ordered_frame_data:
@@ -413,7 +463,7 @@ def analyze_folder(folder: Path, threshold: float, min_dup_length: int,
     print(f"    Duplicates at ref_id boundaries: {boundary_duplicates}")
 
     # Create visualization
-    create_visualization(folder.name, segment_results, ordered_frame_data,
+    create_visualization(folder.name, segment_analyses, ordered_frame_data,
                         threshold, boundary_frames, output_dir)
 
     # Generate cleaned video if requested
@@ -432,7 +482,7 @@ def analyze_folder(folder: Path, threshold: float, min_dup_length: int,
         'folder': folder.name,
         'total_frames': len(ordered_frames),
         'num_segments': len(ref_groups),
-        'segment_results': segment_results,
+        'segment_results': [analysis.to_dict() for analysis in segment_analyses],
         'ordered_data': ordered_frame_data,
         'total_duplicates': total_duplicates,
         'total_dup_sequences': total_dup_sequences,
@@ -440,7 +490,7 @@ def analyze_folder(folder: Path, threshold: float, min_dup_length: int,
     }
 
 
-def create_visualization(folder_name: str, segment_results: List[dict],
+def create_visualization(folder_name: str, segment_results: List[SegmentAnalysis],
                         ordered_data: List[dict], threshold: float,
                         boundary_frames: int, output_dir: Path):
     """
@@ -507,8 +557,8 @@ def create_visualization(folder_name: str, segment_results: List[dict],
     # Plot 4: Per-segment mean differences
     ax4 = plt.subplot(3, 3, 4)
     if segment_results:
-        seg_names = [s['ref_id'][:10] for s in segment_results]
-        seg_means = [s['mean_diff'] for s in segment_results]
+        seg_names = [s.ref_id[:10] for s in segment_results]
+        seg_means = [s.mean_diff for s in segment_results]
         seg_colors = ['red' if m < threshold else 'green' for m in seg_means]
 
         ax4.barh(range(len(segment_results)), seg_means, color=seg_colors,
@@ -525,9 +575,9 @@ def create_visualization(folder_name: str, segment_results: List[dict],
     # Plot 5: Duplicate ratio per segment
     ax5 = plt.subplot(3, 3, 5)
     if segment_results:
-        seg_names = [s['ref_id'][:10] for s in segment_results]
-        dup_ratios = [100 * s['total_duplicates'] / len(s['differences'])
-                     if len(s['differences']) > 0 else 0
+        seg_names = [s.ref_id[:10] for s in segment_results]
+        dup_ratios = [100 * s.total_duplicates / len(s.differences)
+                     if len(s.differences) > 0 else 0
                      for s in segment_results]
 
         ax5.barh(range(len(segment_results)), dup_ratios,
@@ -541,12 +591,12 @@ def create_visualization(folder_name: str, segment_results: List[dict],
     # Plot 6: Start vs End boundary duplicates
     ax6 = plt.subplot(3, 3, 6)
     if segment_results:
-        seg_names = [s['ref_id'][:10] for s in segment_results]
-        start_ratios = [100 * s['start_duplicates'] / s['start_region_size']
-                       if s['start_region_size'] > 0 else 0
+        seg_names = [s.ref_id[:10] for s in segment_results]
+        start_ratios = [100 * s.start_duplicates / s.start_region_size
+                       if s.start_region_size > 0 else 0
                        for s in segment_results]
-        end_ratios = [100 * s['end_duplicates'] / s['end_region_size']
-                     if s['end_region_size'] > 0 else 0
+        end_ratios = [100 * s.end_duplicates / s.end_region_size
+                     if s.end_region_size > 0 else 0
                      for s in segment_results]
 
         x = np.arange(len(segment_results))
@@ -568,8 +618,8 @@ def create_visualization(folder_name: str, segment_results: List[dict],
     ax7 = plt.subplot(3, 3, 7)
     if segment_results:
         # Show which segments have duplicate sequences
-        seg_names = [s['ref_id'][:10] for s in segment_results]
-        num_sequences = [len(s['duplicate_sequences']) for s in segment_results]
+        seg_names = [s.ref_id[:10] for s in segment_results]
+        num_sequences = [len(s.duplicate_sequences) for s in segment_results]
 
         colors_seq = ['red' if n > 0 else 'gray' for n in num_sequences]
         ax7.barh(range(len(segment_results)), num_sequences,
@@ -577,16 +627,16 @@ def create_visualization(folder_name: str, segment_results: List[dict],
         ax7.set_yticks(range(len(segment_results)))
         ax7.set_yticklabels(seg_names)
         ax7.set_xlabel('Number of Duplicate Sequences')
-        ax7.set_title(f'Duplicate Sequences (≥{3} consecutive frames)')
+        ax7.set_title(f'Duplicate Sequences (>={3} consecutive frames)')
         ax7.grid(True, alpha=0.3, axis='x')
 
     # Plot 8: Overall statistics
     ax8 = plt.subplot(3, 3, 8)
     ax8.axis('off')
 
-    total_transitions = sum(len(s['differences']) for s in segment_results)
-    total_dups = sum(s['total_duplicates'] for s in segment_results)
-    total_sequences = sum(len(s['duplicate_sequences']) for s in segment_results)
+    total_transitions = sum(len(s.differences) for s in segment_results)
+    total_dups = sum(s.total_duplicates for s in segment_results)
+    total_sequences = sum(len(s.duplicate_sequences) for s in segment_results)
 
     stats_text = f"""
     Overall Statistics:
@@ -607,9 +657,9 @@ def create_visualization(folder_name: str, segment_results: List[dict],
     ax9.axis('off')
 
     # Find segments with high duplicate ratios
-    problem_segments = [(s['ref_id'],
-                        100 * s['total_duplicates'] / len(s['differences']) if len(s['differences']) > 0 else 0,
-                        len(s['duplicate_sequences']))
+    problem_segments = [(s.ref_id,
+                        100 * s.total_duplicates / len(s.differences) if len(s.differences) > 0 else 0,
+                        len(s.duplicate_sequences))
                        for s in segment_results]
     problem_segments.sort(key=lambda x: x[1], reverse=True)
 
@@ -687,4 +737,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-#   python scripts/sentence/detect_duplicate_frames.py --frames-dir output/frames_hand_filtered_0.7_v2 --duplicate-threshold 2.0 --min-duplicate-length 3 --boundary-frames 10 --save-cleaned-frames --output-dir output/frames_512x320_cleaned_v2
+#   python scripts/sentence/filter_duplicate_frames.py --frames-dir output/frames_512x320 --duplicate-threshold 3.0 --min-duplicate-length 2 --boundary-frames 15 --save-cleaned-frames --output-dir output/frames_512x320_filtered1

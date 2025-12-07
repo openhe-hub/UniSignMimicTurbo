@@ -5,6 +5,8 @@ from typing import List, Tuple
 
 import cv2
 
+# python scripts/sentence/generate_videos_from_frames.py --frames-dir output/frames_512x320_filtered2 --output-dir output/generated_videos
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
