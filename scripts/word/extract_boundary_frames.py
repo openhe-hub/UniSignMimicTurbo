@@ -198,4 +198,4 @@ if __name__ == "__main__":
     main()
 
 # Example usage:
-# python scripts/word/extract_boundary_frames.py --frames-root output/sentence_level/frames_512x320_filtered2 --ref-image assets/example_data/images/test3_512x320.jpg --out-root output/word_level/word_boundary_frames
+# python scripts/word/extract_boundary_frames.py --frames-root output/sentence_level/frames_512x320_filtered2 --ref-image assets/example_data/images/test5.jpg --out-root output/word_level/word_boundary_frames

@@ -99,7 +99,7 @@ def get_args():
     parser.add_argument(
         "--use_sift",
         type=int,
-        default=1,
+        default=0,
         choices=[0, 1],
         help="Whether to use SIFT to automatically estimate trajectories when no control points are given.",
     )

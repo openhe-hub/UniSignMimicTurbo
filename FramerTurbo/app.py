@@ -108,6 +108,13 @@ def get_args():
         ),
     )
 
+    parser.add_argument(
+        "--num_inference_steps",
+        type=int,
+        default=30,
+        help="Number of denoising steps for inference. Higher values improve quality but take longer.",
+    )
+
     args = parser.parse_args()
 
     return args
@@ -528,11 +535,11 @@ class Drag:
             num_frames=14,
             width=width,
             height=height,
-            # decode_chunk_size=8, 
+            # decode_chunk_size=8,
             # generator=generator,
             motion_bucket_id=motion_bucket_id,
             fps=7,
-            num_inference_steps=30,
+            num_inference_steps=self.args.num_inference_steps,
             # track
             sift_track_update=sift_track_update,
             anchor_points_flag=anchor_points_flag,

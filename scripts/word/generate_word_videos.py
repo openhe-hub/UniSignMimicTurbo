@@ -233,4 +233,4 @@ if __name__ == "__main__":
     main()
 
 # Example usage:
-# python scripts/word/generate_word_videos.py --frames-root output/sentence_level/frames_512x320_filtered2 --out-root output/word_level/word_videos --fps 25
+# python scripts/word/generate_word_videos.py --frames-root output/sentence_level/frames_512x320_filtered2 --out-root output/word_level/word_videos --fps 10

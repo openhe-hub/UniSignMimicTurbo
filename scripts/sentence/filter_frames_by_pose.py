@@ -608,4 +608,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# python scripts/sentence/filter_frames_by_pose.py --frames-dir output/sentence_level/frames_512x320_filtered1 --save-filtered --output-dir output/sentence_level/frames_512x320_filtered2 --hand-threshold 0.8 --head-threshold 0.9 --hand-height-threshold 0.1
+# python scripts/sentence/filter_frames_by_pose.py --frames-dir output/sentence_level/frames_512x320_filtered1 --save-filtered --output-dir output/sentence_level/frames_512x320_filtered2 --hand-threshold 0.8 --head-threshold 0.9 --hand-height-threshold 0.2
