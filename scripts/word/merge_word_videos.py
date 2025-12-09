@@ -343,24 +343,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# Example usage:
-# 1. Merge all folders to 512x512 (default):
-#    python scripts/word/merge_word_videos.py \
-#        --input-root output/word_level/word_videos_complete \
-#        --output-root output/word_level/merged_videos_512x512 \
-#        --fps 25
-#
-# 2. Merge all folders with custom resolution:
-#    python scripts/word/merge_word_videos.py \
-#        --input-root output/word_level/word_videos_complete \
-#        --output-root output/word_level/merged_videos \
-#        --fps 25 \
-#        --output-width 640 \
-#        --output-height 640
-#
-# 3. Merge a specific folder:
-#    python scripts/word/merge_word_videos.py \
-#        --input-root output/word_level/word_videos_complete \
-#        --output-root output/word_level/merged_videos_512x512 \
-#        --subfolder test01 \
-#        --fps 25
+# python scripts/word/merge_word_videos.py --input-root output/word_level/word_videos_complete --output-root output/word_level/merged_videos_576x576 --fps 25 --output-width 576 --output-height 576

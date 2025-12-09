@@ -512,11 +512,9 @@ class Drag:
 
     @spaces.GPU
     def run(self, first_frame_path, last_frame_path, tracking_points, controlnet_cond_scale, motion_bucket_id, output_path=None):
-        original_width, original_height = 512, 320  # TODO
-
         # load_image
         image = Image.open(first_frame_path).convert('RGB')
-        width, height = image.size
+        original_width, original_height = image.size  # Get original image size
         image = image.resize((self.width, self.height))
 
         image_end = Image.open(last_frame_path).convert('RGB')
@@ -616,8 +614,8 @@ class Drag:
             controlnet_cond_scale=controlnet_cond_scale,
             # others
             num_frames=self.model_length,  # 使用初始化时传入的帧数
-            width=width,
-            height=height,
+            width=self.width,
+            height=self.height,
             # decode_chunk_size=8,
             # generator=generator,
             motion_bucket_id=motion_bucket_id,

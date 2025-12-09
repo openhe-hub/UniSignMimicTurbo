@@ -33,13 +33,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--width",
         type=int,
-        default=512,
+        default=576,
         help="Target width after resize (default: 512).",
     )
     parser.add_argument(
         "--height",
         type=int,
-        default=320,
+        default=576,
         help="Target height after resize (default: 320).",
     )
     return parser.parse_args()
@@ -82,9 +82,9 @@ def process_gif(
 
         resized = cropped.resize((target_width, target_height), Image.LANCZOS)
 
-        # Convert back to palette mode for GIF.
-        pal_frame = resized.convert("P", palette=Image.ADAPTIVE)
-        frames.append(pal_frame)
+        # Convert to RGB first to ensure consistency
+        rgb_frame = resized.convert("RGB")
+        frames.append(rgb_frame)
 
         duration = frame.info.get("duration", im.info.get("duration", 40))
         durations.append(duration)
@@ -102,6 +102,7 @@ def process_gif(
         "loop": im.info.get("loop", 0),
         "duration": durations,
         "disposal": im.info.get("disposal", 2),
+        "optimize": False,  # Avoid palette size issues
     }
 
     try:
@@ -149,5 +150,5 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# python scripts/word/crop_resize_gifs_right.py --in-root output/word_level/interp --out-root output/word_level/interp_512x320
+# python scripts/word/crop_resize_gifs_right.py --in-root output/word_level/interp --out-root output/word_level/interp_576x576
 

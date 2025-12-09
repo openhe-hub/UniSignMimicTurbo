@@ -427,4 +427,4 @@ if __name__ == "__main__":
 # Example usage:
 # python scripts/word/combine_word_with_interp.py --word-videos-root output/word_level/word_videos --interp-root output/word_level/interp_512x320 --out-root output/word_level/word_videos_complete --fps 25
 # With verbose mode (adds [PRE], [WORD], [POST] labels):
-# python scripts/word/combine_word_with_interp.py --word-videos-root output/word_level/word_videos --interp-root output/word_level/interp_512x320 --out-root output/word_level/word_videos_complete --fps 5 --verbose
+# python scripts/word/combine_word_with_interp.py --word-videos-root output/word_level/word_videos --interp-root output/word_level/interp --out-root output/word_level/word_videos_complete --fps 5 --verbose

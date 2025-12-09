@@ -737,4 +737,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# python scripts/sentence/filter_duplicate_frames.py --frames-dir output/sentence_level/frames_512x320 --duplicate-threshold 3.0 --min-duplicate-length 2 --boundary-frames 15 --save-cleaned-frames --output-dir output/sentence_level/frames_512x320_filtered1
+# python scripts/sentence/filter_duplicate_frames.py --frames-dir output/sentence_level/frames --duplicate-threshold 3.0 --min-duplicate-length 2 --boundary-frames 15 --save-cleaned-frames --output-dir output/sentence_level/frames_512x320_filtered1
