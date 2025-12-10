@@ -1,38 +1,38 @@
-# FramerTurbo 训练数据准备指南
+# FramerTurbo Training Data Preparation Guide
 
-## 📋 数据集要求总结
+## 📋 Dataset Requirements Summary
 
-### ✅ 视频格式要求
+### ✅ Video Format Requirements
 
-| 项目 | 要求 | 说明 |
-|------|------|------|
-| **格式** | `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm` | 常见视频格式都支持 |
-| **最小帧数** | ≥ 16 帧 | 太短的视频会被自动过滤 |
-| **分辨率** | **任意** | 会自动 resize 到目标分辨率 |
-| **帧率** | 任意 | 训练时会自动采样 |
-| **时长** | 建议 1-10 秒 | 短视频训练效果更好 |
+| Item | Requirement | Notes |
+|------|-------------|-------|
+| **Format** | `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm` | Common video formats are supported |
+| **Minimum Frames** | ≥ 16 frames | Too short videos will be automatically filtered |
+| **Resolution** | **Any** | Will be automatically resized to target resolution |
+| **Frame Rate** | Any | Will be automatically sampled during training |
+| **Duration** | Recommended 1-10 seconds | Shorter videos train better |
 
-### 🎯 推荐的训练分辨率
+### 🎯 Recommended Training Resolutions
 
 ```python
-# 标准分辨率（默认）
-height=320, width=512   # 推荐，显存友好
+# Standard resolution (default)
+height=320, width=512   # Recommended, memory-friendly
 
-# 高分辨率（需要更多显存）
-height=576, width=576   # 如果你有更大的显存
+# High resolution (requires more memory)
+height=576, width=576   # If you have larger GPU memory
 
-# 自定义分辨率
-height=H, width=W       # 必须是 8 的倍数
+# Custom resolution
+height=H, width=W       # Must be multiples of 8
 ```
 
-**重要**:
-- ✅ 宽高必须是 **8 的倍数**（VAE 编码要求）
-- ✅ 训练分辨率可以和视频原始分辨率不同
-- ✅ 推荐使用 512x320（和预训练模型一致）
+**Important**:
+- ✅ Width and height must be **multiples of 8** (VAE encoding requirement)
+- ✅ Training resolution can differ from video's original resolution
+- ✅ Recommended to use 512x320 (consistent with pre-trained model)
 
-## 📁 数据集组织方式
+## 📁 Dataset Organization
 
-### 方式 1: 视频文件（推荐）
+### Method 1: Video Files (Recommended)
 
 ```
 data/
@@ -46,12 +46,12 @@ data/
     └── ...
 ```
 
-**优点**:
-- 简单，直接扔视频就行
-- 自动递归搜索子目录
-- 自动采样帧序列
+**Advantages**:
+- Simple, just drop videos
+- Automatically searches subdirectories recursively
+- Automatically samples frame sequences
 
-### 方式 2: 图像对（适合已处理的数据）
+### Method 2: Image Pairs (For Preprocessed Data)
 
 ```
 data/
@@ -63,79 +63,79 @@ data/
     └── ...
 ```
 
-**注意**: 命名必须遵循 `{id}_start.{ext}` 和 `{id}_end.{ext}` 格式
+**Note**: Naming must follow `{id}_start.{ext}` and `{id}_end.{ext}` format
 
-## 🎬 数据质量建议
+## 🎬 Data Quality Recommendations
 
-### ✅ 好的训练数据
+### ✅ Good Training Data
 
-1. **清晰的运动**
-   - 明显的物体移动
-   - 平滑的运动轨迹
-   - 避免剧烈抖动
+1. **Clear Motion**
+   - Obvious object movement
+   - Smooth motion trajectories
+   - Avoid severe shaking
 
-2. **良好的画质**
-   - 分辨率 ≥ 480p
-   - 无明显压缩伪影
-   - 光照均匀
+2. **Good Image Quality**
+   - Resolution ≥ 480p
+   - No obvious compression artifacts
+   - Even lighting
 
-3. **合适的内容**
-   - 与你的应用场景相关
-   - 例如：手语数据集 → 收集手语视频
+3. **Appropriate Content**
+   - Relevant to your application scenario
+   - Example: Sign language dataset → collect sign language videos
 
-4. **多样性**
-   - 不同的场景
-   - 不同的运动速度
-   - 不同的背景
+4. **Diversity**
+   - Different scenes
+   - Different motion speeds
+   - Different backgrounds
 
-### ❌ 避免的数据
+### ❌ Data to Avoid
 
-- 静态画面（没有运动）
-- 过度模糊或压缩
-- 快速闪烁或场景切换
-- 极暗或过曝的画面
+- Static frames (no motion)
+- Overly blurry or compressed
+- Rapid flickering or scene changes
+- Extremely dark or overexposed frames
 
-## 📊 数据集规模建议
+## 📊 Dataset Scale Recommendations
 
-| 数据量 | 训练轮数 | 效果 | 适用场景 |
-|--------|---------|------|----------|
-| **50-100 视频** | 10-20 epochs | 初步适应 | 概念验证 |
-| **100-500 视频** | 5-10 epochs | 良好适应 | 小型项目 |
-| **500-1000 视频** | 3-5 epochs | 很好效果 | 推荐规模 |
-| **1000+ 视频** | 2-3 epochs | 最佳效果 | 生产环境 |
+| Data Volume | Training Epochs | Effect | Use Case |
+|------------|----------------|--------|----------|
+| **50-100 videos** | 10-20 epochs | Initial adaptation | Proof of concept |
+| **100-500 videos** | 5-10 epochs | Good adaptation | Small projects |
+| **500-1000 videos** | 3-5 epochs | Great results | Recommended scale |
+| **1000+ videos** | 2-3 epochs | Best results | Production |
 
-**重要**:
-- 质量 > 数量
-- 50 个高质量视频 > 500 个低质量视频
+**Important**:
+- Quality > Quantity
+- 50 high-quality videos > 500 low-quality videos
 
-## 🛠️ 数据准备实战
+## 🛠️ Data Preparation Walkthrough
 
-### 步骤 1: 创建数据目录
+### Step 1: Create Data Directory
 
 ```bash
 cd FramerTurbo
 mkdir -p data/training_videos
 ```
 
-### 步骤 2: 放置视频文件
+### Step 2: Place Video Files
 
 ```bash
-# 直接复制视频到目录
+# Directly copy videos to directory
 cp /path/to/your/videos/*.mp4 data/training_videos/
 
-# 或者创建软链接（节省空间）
+# Or create symbolic links (saves space)
 ln -s /path/to/your/videos/*.mp4 data/training_videos/
 ```
 
-### 步骤 3: 验证数据集
+### Step 3: Validate Dataset
 
-创建一个测试脚本：
+Create a test script:
 
 ```python
 # test_dataset.py
 from training.train_dataset import VideoFrameDataset
 
-# 测试数据集
+# Test dataset
 dataset = VideoFrameDataset(
     video_dir="data/training_videos",
     num_frames=3,
@@ -144,123 +144,123 @@ dataset = VideoFrameDataset(
     min_video_frames=16,
 )
 
-print(f"总共找到 {len(dataset)} 个有效视频")
+print(f"Found {len(dataset)} valid videos")
 
-# 查看第一个样本
+# View first sample
 sample = dataset[0]
-print(f"样本形状: {sample['pixel_values'].shape}")  # 应该是 (3, 3, 320, 512)
-print(f"视频路径: {sample['video_path']}")
+print(f"Sample shape: {sample['pixel_values'].shape}")  # Should be (3, 3, 320, 512)
+print(f"Video path: {sample['video_path']}")
 ```
 
-运行测试：
+Run test:
 ```bash
 python test_dataset.py
 ```
 
-### 步骤 4: 检查视频质量
+### Step 4: Check Video Quality
 
 ```bash
-# 安装 ffprobe（如果没有）
+# Install ffprobe (if not available)
 # sudo apt-get install ffmpeg
 
-# 检查单个视频信息
+# Check single video info
 ffprobe -v quiet -show_entries format=duration -show_entries stream=width,height,nb_frames,r_frame_rate -of json data/training_videos/video_001.mp4
 ```
 
-## 🎯 针对手语数据集的特殊建议
+## 🎯 Special Recommendations for Sign Language Dataset
 
-既然你在做手语相关的项目（从目录名 `UniSignMimicTurbo` 推测），这里有一些专门建议：
+Since you're working on sign language-related projects (inferred from `UniSignMimicTurbo` directory name), here are specific recommendations:
 
-### 手语视频数据特点
+### Sign Language Video Data Characteristics
 
-1. **关注手部区域**
-   - 确保手部清晰可见
-   - 避免严重的手部遮挡
-   - 手部运动轨迹完整
+1. **Focus on Hand Regions**
+   - Ensure hands are clearly visible
+   - Avoid severe hand occlusion
+   - Complete hand motion trajectories
 
-2. **背景处理**
-   - 纯色背景最佳
-   - 避免复杂背景干扰
-   - 考虑使用 `scripts/word/replace_video_background.py` 预处理
+2. **Background Processing**
+   - Solid color background is best
+   - Avoid complex background interference
+   - Consider using `scripts/word/replace_video_background.py` for preprocessing
 
-3. **视频剪辑**
-   - 每个视频对应一个完整的手语动作
-   - 起始帧和结束帧应该是动作的关键姿态
-   - 避免动作开始前/结束后的静止帧
+3. **Video Clipping**
+   - Each video corresponds to a complete sign language gesture
+   - Start and end frames should be key poses of the gesture
+   - Avoid static frames before/after gesture
 
-4. **数据增强建议**
-   - 同一动作的不同执行者
-   - 不同的拍摄角度
-   - 不同的速度（如果有）
+4. **Data Augmentation Recommendations**
+   - Different performers for the same gesture
+   - Different shooting angles
+   - Different speeds (if available)
 
-### 手语数据的采样策略
+### Sampling Strategy for Sign Language Data
 
-修改 `scripts/train_lora.sh`:
+Modify `scripts/train/train_lora.sh`:
 
 ```bash
-# 针对手语，可能需要更多帧
-NUM_FRAMES=5  # 增加到 5 帧，更好地捕捉手部运动
+# For sign language, may need more frames
+NUM_FRAMES=5  # Increase to 5 frames for better hand motion capture
 
-# 如果视频较短，减小采样步长
-# 在 train_dataset.py 中 sample_stride=2
+# If videos are short, reduce sampling stride
+# In train_dataset.py, set sample_stride=2
 ```
 
-## 📝 数据准备检查清单
+## 📝 Data Preparation Checklist
 
-在开始训练前，确认：
+Before starting training, confirm:
 
-- [ ] 视频格式正确（.mp4, .avi, .mov, .mkv, .webm）
-- [ ] 每个视频 ≥ 16 帧
-- [ ] 视频质量良好（清晰、无过度压缩）
-- [ ] 数据集规模合理（建议 ≥ 100 个视频）
-- [ ] 运行 `test_dataset.py` 成功
-- [ ] 检查了几个样本的质量
-- [ ] 确定了训练分辨率（推荐 512x320）
+- [ ] Video format is correct (.mp4, .avi, .mov, .mkv, .webm)
+- [ ] Each video ≥ 16 frames
+- [ ] Good video quality (clear, not over-compressed)
+- [ ] Reasonable dataset size (recommended ≥ 100 videos)
+- [ ] Successfully ran `test_dataset.py`
+- [ ] Checked quality of several samples
+- [ ] Determined training resolution (recommended 512x320)
 
-## 🚀 快速开始训练
+## 🚀 Quick Start Training
 
-数据准备好后：
+After data is prepared:
 
 ```bash
-# 1. 编辑训练脚本
-nano scripts/train_lora.sh
+# 1. Edit training script
+nano scripts/train/train_lora.sh
 
-# 修改这一行：
-DATA_DIR="data/training_videos"  # 改成你的数据目录
+# Modify this line:
+DATA_DIR="data/training_videos"  # Change to your data directory
 
-# 2. 启动训练
-bash scripts/train_lora.sh
+# 2. Start training
+bash scripts/train/train_lora.sh
 ```
 
-## ❓ 常见问题
+## ❓ FAQ
 
-**Q: 视频分辨率必须一致吗？**
-A: 不需要！代码会自动 resize 到目标分辨率。
+**Q: Must video resolutions be consistent?**
+A: No! Code will automatically resize to target resolution.
 
-**Q: 可以混合不同帧率的视频吗？**
-A: 可以！训练时会自动采样。
+**Q: Can I mix videos with different frame rates?**
+A: Yes! Training will automatically sample frames.
 
-**Q: 最少需要多少视频？**
-A: 理论上 50 个就能开始，但建议 100+ 以获得更好效果。
+**Q: What's the minimum number of videos needed?**
+A: Theoretically 50 can start, but 100+ is recommended for better results.
 
-**Q: 视频太长怎么办？**
-A: 代码会自动随机采样片段，或者你可以预先切分视频。
+**Q: What if videos are too long?**
+A: Code will automatically sample random segments, or you can pre-split videos.
 
-**Q: 如何切分长视频？**
+**Q: How to split long videos?**
 ```bash
-# 使用 ffmpeg 切分成 2 秒片段
+# Use ffmpeg to split into 2-second segments
 ffmpeg -i input.mp4 -c copy -map 0 -segment_time 2 -f segment output_%03d.mp4
 ```
 
-**Q: 我的视频是竖屏的，需要转吗？**
-A: 不需要！代码会 resize，但建议保持训练数据的方向一致。
+**Q: My videos are portrait orientation, need to convert?**
+A: No! Code will resize, but it's recommended to keep training data orientation consistent.
 
-## 📚 相关文档
+## 📚 Related Documentation
 
-- [完整训练教程](TRAINING.md)
-- [快速开始](QUICKSTART.md)
-- [训练配置](../training/train_config.py)
+- [Complete Training Tutorial](TRAINING.md)
+- [Quick Start](QUICKSTART.md)
+- [Training Configuration](../training/train_config.py)
 
 ---
 
-**准备好数据后，查看**: [docs/TRAINING.md](TRAINING.md) 开始训练！
+**After data is prepared, see**: [docs/TRAINING.md](TRAINING.md) to start training!

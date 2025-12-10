@@ -1,14 +1,18 @@
-# FramerTurbo 目录结构说明
+# FramerTurbo Directory Structure
 
 ```
 FramerTurbo/
 │
-├── README.md                    # 项目主文档
-├── requirements.txt             # Python 依赖
+├── README.md                    # Main project documentation
+├── requirements.txt             # Python dependencies
 ├── .gitignore
-├── STRUCTURE.md                 # 本文件 - 目录结构说明
+├── docs/
+│   ├── STRUCTURE.md             # This file - Directory structure
+│   ├── QUICKSTART.md            # Quick start guide
+│   ├── TRAINING.md              # Training documentation
+│   └── DATA_PREPARATION.md      # Data preparation guide
 │
-├── models_diffusers/            # 模型定义
+├── models_diffusers/            # Model definitions
 │   ├── unet_spatio_temporal_condition.py
 │   ├── controlnet_svd.py
 │   ├── attention.py
@@ -19,103 +23,117 @@ FramerTurbo/
 │   ├── sift_match.py
 │   └── utils.py
 │
-├── pipelines/                   # 推理 Pipeline
+├── pipelines/                   # Inference pipelines
 │   └── pipeline_stable_video_diffusion_interp_control.py
 │
-├── gradio_demo/                 # Gradio 演示相关工具
+├── gradio_demo/                 # Gradio demo utilities
 │   └── utils_drag.py
 │
-├── apps/                        # Gradio 应用程序
-│   ├── app.py                  # 原始版本
-│   ├── app_turbo.py            # Turbo 版本
-│   └── app_turbo_v2.py         # Turbo v2 版本（最新）
+├── apps/                        # Gradio applications
+│   ├── app.py                  # Original version
+│   ├── app_turbo.py            # Turbo version
+│   └── app_turbo_v2.py         # Turbo v2 version (latest)
 │
-├── scripts/                     # 脚本目录
-│   ├── inference/              # 推理脚本
-│   │   ├── cli_infer.py               # 基础推理
-│   │   ├── cli_infer_turbo.py         # Turbo 推理
-│   │   ├── cli_infer_turbo_v2.py      # Turbo v2 推理（推荐）
-│   │   └── cli_infer_576x576.py       # 高分辨率推理
-│   ├── slurm/                  # SLURM 集群脚本
+├── scripts/                     # Scripts directory
+│   ├── inference/              # Inference scripts
+│   │   ├── cli_infer.py               # Basic inference
+│   │   ├── cli_infer_turbo.py         # Turbo inference
+│   │   ├── cli_infer_turbo_v2.py      # Turbo v2 inference (recommended)
+│   │   └── cli_infer_576x576.py       # High-resolution inference
+│   ├── slurm/                  # SLURM cluster scripts
 │   │   └── infer_576x576_euler.sh
-│   └── train_lora.sh           # LoRA 训练启动脚本
+│   ├── train/                  # Training scripts
+│   │   └── train_lora.sh       # LoRA training launch script
+│   └── eval/                   # Evaluation scripts
+│       └── parse_training_log.py
 │
-├── training/                    # 训练相关（LoRA 微调）
-│   ├── README.md               # 训练文档
-│   ├── train_lora.py           # LoRA 训练主脚本
-│   ├── train_dataset.py        # 数据集定义
-│   ├── train_config.py         # 训练配置示例
-│   └── infer_with_lora.py      # LoRA 模型推理脚本
+├── training/                    # Training code (LoRA fine-tuning)
+│   ├── train_lora.py           # LoRA training main script
+│   ├── train_dataset.py        # Dataset definition
+│   ├── train_config.py         # Training configuration example
+│   ├── infer_with_lora.py      # LoRA model inference script
+│   ├── batch_infer_with_lora.py # Batch inference with LoRA
+│   └── validate_on_trainset.py  # Validation on training data
 │
-└── assets/                      # 资源文件
+└── assets/                      # Asset files
     └── logo/
         └── framer.png
 ```
 
-## 📁 目录说明
+## 📁 Directory Descriptions
 
-### 核心模块
+### Core Modules
 
-- **models_diffusers/** - 自定义的 Diffusers 模型组件
-  - UNet、ControlNet 实现
-  - 自定义的注意力机制和调度器
+- **models_diffusers/** - Custom Diffusers model components
+  - UNet, ControlNet implementations
+  - Custom attention mechanisms and schedulers
 
-- **pipelines/** - 推理管道
-  - 集成了 ControlNet 的 SVD 插帧 pipeline
+- **pipelines/** - Inference pipelines
+  - SVD interpolation pipeline integrated with ControlNet
 
-### 应用和脚本
+### Applications and Scripts
 
-- **apps/** - Gradio 交互应用
-  - `app_turbo_v2.py` 是最新版本，支持多种调度器
+- **apps/** - Gradio interactive applications
+  - `app_turbo_v2.py` is the latest version, supporting multiple schedulers
 
-- **scripts/** - 各类脚本
-  - `inference/` - 命令行推理脚本
-    - 推荐使用 `cli_infer_turbo_v2.py`
-  - `slurm/` - 集群任务脚本
-  - `train_lora.sh` - 训练启动脚本
+- **scripts/** - Various scripts
+  - `inference/` - Command-line inference scripts
+    - Recommended: `cli_infer_turbo_v2.py`
+  - `slurm/` - Cluster job scripts
+  - `train/` - Training scripts
+    - `train_lora.sh` - Training launch script
+  - `eval/` - Evaluation and analysis scripts
 
-### 训练模块
+### Training Module
 
-- **training/** - LoRA 微调训练
-  - 完整的训练代码和文档
-  - 支持视频文件和图像对数据集
-  - 详见 `training/README.md`
+- **training/** - LoRA fine-tuning
+  - Complete training code and documentation
+  - Supports video files and image pair datasets
+  - See `docs/TRAINING.md` for details
 
-## 🚀 快速使用
+### Documentation
 
-### 推理
+- **docs/** - Project documentation
+  - `QUICKSTART.md` - Quick start guide
+  - `STRUCTURE.md` - This file
+  - `TRAINING.md` - Complete training tutorial
+  - `DATA_PREPARATION.md` - Data preparation guide
+
+## 🚀 Quick Usage
+
+### Inference
 ```bash
-# 推荐使用 Turbo v2 版本
+# Recommended: Use Turbo v2 version
 python scripts/inference/cli_infer_turbo_v2.py \
     --input_dir assets/pairs \
     --model checkpoints/framer_512x320/ \
     --output_dir outputs
 ```
 
-### 训练
+### Training
 ```bash
-# 查看训练文档
-cat training/README.md
+# View training documentation
+cat docs/TRAINING.md
 
-# 启动 LoRA 训练
-bash scripts/train_lora.sh
+# Start LoRA training
+bash scripts/train/train_lora.sh
 ```
 
-### Gradio 应用
+### Gradio Application
 ```bash
-# 启动 Turbo v2 应用
+# Launch Turbo v2 app
 python apps/app_turbo_v2.py
 ```
 
-## 📝 版本说明
+## 📝 Version Notes
 
-- **基础版本** (`app.py`, `cli_infer.py`): 原始实现，使用 Euler 调度器
-- **Turbo 版本** (`app_turbo.py`, `cli_infer_turbo.py`): 增加 LCM 调度器支持
-- **Turbo v2 版本** (`app_turbo_v2.py`, `cli_infer_turbo_v2.py`): 支持 Euler/DPM++/LCM 多种调度器（推荐）
+- **Basic Version** (`app.py`, `cli_infer.py`): Original implementation using Euler scheduler
+- **Turbo Version** (`app_turbo.py`, `cli_infer_turbo.py`): Added LCM scheduler support
+- **Turbo v2 Version** (`app_turbo_v2.py`, `cli_infer_turbo_v2.py`): Supports Euler/DPM++/LCM multiple schedulers (recommended)
 
-## 🔄 迁移指南
+## 🔄 Migration Guide
 
-如果你之前使用根目录下的脚本，请更新路径：
+If you previously used scripts in the root directory, please update paths:
 
 - `cli_infer_turbo_v2.py` → `scripts/inference/cli_infer_turbo_v2.py`
 - `app_turbo_v2.py` → `apps/app_turbo_v2.py`

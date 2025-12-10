@@ -1,73 +1,75 @@
-# FramerTurbo - 快速导航
+# FramerTurbo - Quick Start Guide
 
-欢迎使用 FramerTurbo！本文档帮助你快速了解项目结构和使用方法。
+Welcome to FramerTurbo! This guide helps you quickly understand the project structure and usage.
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 FramerTurbo/
-├── 📖 README.md                 # 项目主文档
-├── 📖 STRUCTURE.md              # 详细的目录结构说明
-├── 📖 QUICKSTART.md             # 本文件
+├── 📖 README.md                 # Main project documentation
+├── 📖 STRUCTURE.md              # Detailed directory structure
+├── 📖 QUICKSTART.md             # This file
 │
-├── 🎨 apps/                     # Gradio 交互应用
-│   └── app_turbo_v2.py         # 推荐使用（支持多种调度器）
+├── 🎨 apps/                     # Gradio interactive apps
+│   └── app_turbo_v2.py         # Recommended (supports multiple schedulers)
 │
-├── 🔧 scripts/                  # 脚本工具
-│   ├── inference/              # 推理脚本
-│   │   └── cli_infer_turbo_v2.py  # 推荐使用
-│   ├── slurm/                  # 集群任务
-│   └── train_lora.sh           # 训练启动脚本
+├── 🔧 scripts/                  # Script tools
+│   ├── inference/              # Inference scripts
+│   │   └── cli_infer_turbo_v2.py  # Recommended
+│   ├── slurm/                  # Cluster jobs
+│   └── train/
+│       └── train_lora.sh       # Training launch script
 │
-├── 🎓 training/                 # LoRA 微调训练
-│   ├── README.md               # 训练详细文档
-│   ├── train_lora.py           # 训练脚本
-│   ├── train_dataset.py        # 数据集
-│   ├── train_config.py         # 配置示例
-│   └── infer_with_lora.py      # LoRA 推理
+├── 🎓 training/                 # LoRA fine-tuning
+│   ├── train_lora.py           # Training script
+│   ├── train_dataset.py        # Dataset implementation
+│   ├── train_config.py         # Configuration example
+│   ├── infer_with_lora.py      # LoRA inference
+│   ├── batch_infer_with_lora.py # Batch LoRA inference
+│   └── validate_on_trainset.py  # Validation on training data
 │
-├── 🏗️ models_diffusers/         # 模型定义
-├── 🔄 pipelines/                # Pipeline
-├── 🎯 gradio_demo/              # Gradio 工具
-└── 📦 assets/                   # 示例资源
+├── 🏗️ models_diffusers/         # Model definitions
+├── 🔄 pipelines/                # Pipelines
+├── 🎯 gradio_demo/              # Gradio utilities
+└── 📦 assets/                   # Example assets
 ```
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1️⃣ 推理（生成视频）
+### 1️⃣ Inference (Generate Videos)
 
-**命令行推理**（推荐）:
+**Command-line Inference** (Recommended):
 ```bash
-# 使用 DPM++ 调度器（平衡速度和质量）
+# Using DPM++ scheduler (balanced speed and quality)
 python scripts/inference/cli_infer_turbo_v2.py \
     --input_dir assets/test_single \
     --model checkpoints/framer_512x320 \
     --output_dir outputs
 ```
 
-**图形界面**:
+**Graphical Interface**:
 ```bash
 python apps/app_turbo_v2.py
 ```
 
-### 2️⃣ 训练（微调模型）
+### 2️⃣ Training (Fine-tune Model)
 
-查看完整训练文档:
+See complete training documentation:
 ```bash
-cat training/README.md
+cat docs/TRAINING.md
 ```
 
-快速开始训练:
+Quick start training:
 ```bash
-# 1. 准备数据（将视频放在 data/training_videos/）
-# 2. 编辑配置
-nano scripts/train_lora.sh
+# 1. Prepare data (place videos in data/training_videos/)
+# 2. Edit configuration
+nano scripts/train/train_lora.sh
 
-# 3. 启动训练
-bash scripts/train_lora.sh
+# 3. Start training
+bash scripts/train/train_lora.sh
 ```
 
-### 3️⃣ 使用微调后的模型
+### 3️⃣ Use Fine-tuned Model
 
 ```bash
 python training/infer_with_lora.py \
@@ -77,52 +79,52 @@ python training/infer_with_lora.py \
     --output_path output.gif
 ```
 
-## 📝 常用命令
+## 📝 Common Commands
 
-### 推理相关
+### Inference
 
 ```bash
-# 基础推理（Euler，30步，最佳质量）
+# Basic inference (Euler, 30 steps, best quality)
 python scripts/inference/cli_infer_turbo_v2.py \
     --input_dir INPUT_DIR \
     --model checkpoints/framer_512x320 \
     --scheduler euler \
     --num_inference_steps 30
 
-# 快速推理（DPM++，15步，推荐）
+# Fast inference (DPM++, 15 steps, recommended)
 python scripts/inference/cli_infer_turbo_v2.py \
     --input_dir INPUT_DIR \
     --model checkpoints/framer_512x320 \
     --scheduler dpm++ \
     --num_inference_steps 15
 
-# 超快推理（LCM，4步）
+# Ultra-fast inference (LCM, 4 steps)
 python scripts/inference/cli_infer_turbo_v2.py \
     --input_dir INPUT_DIR \
     --model checkpoints/framer_512x320 \
     --scheduler lcm \
     --num_inference_steps 4
 
-# 高分辨率推理（576x576）
+# High-resolution inference (576x576)
 python scripts/inference/cli_infer_576x576.py \
     --input_dir INPUT_DIR \
     --model checkpoints/framer_576x576 \
     --output_dir outputs_hd
 ```
 
-### 训练相关
+### Training
 
 ```bash
-# 查看训练配置
+# View training configuration
 cat training/train_config.py
 
-# 编辑训练脚本
-nano scripts/train_lora.sh
+# Edit training script
+nano scripts/train/train_lora.sh
 
-# 启动训练
-bash scripts/train_lora.sh
+# Start training
+bash scripts/train/train_lora.sh
 
-# 使用自定义参数训练
+# Train with custom parameters
 python training/train_lora.py \
     --pretrained_model_path checkpoints/framer_512x320 \
     --data_dir data/my_videos \
@@ -132,53 +134,53 @@ python training/train_lora.py \
     --train_unet
 ```
 
-## 📚 详细文档
+## 📚 Detailed Documentation
 
-- **项目介绍**: [README.md](README.md)
-- **目录结构**: [STRUCTURE.md](STRUCTURE.md)
-- **训练指南**: [training/README.md](training/README.md)
+- **Project Overview**: [README.md](../README.md)
+- **Directory Structure**: [STRUCTURE.md](STRUCTURE.md)
+- **Training Guide**: [TRAINING.md](TRAINING.md)
 
-## ⚙️ 调度器对比
+## ⚙️ Scheduler Comparison
 
-| 调度器 | 步数 | 速度 | 质量 | 使用场景 |
-|--------|------|------|------|----------|
-| Euler  | 30   | 慢   | 最佳 | 最终产出 |
-| DPM++  | 15   | 快   | 优秀 | 日常使用（推荐）|
-| LCM    | 4-6  | 极快 | 良好 | 快速预览 |
+| Scheduler | Steps | Speed      | Quality | Use Case |
+|-----------|-------|------------|---------|----------|
+| Euler     | 30    | Slow       | Best    | Final production |
+| DPM++     | 15    | Fast       | Excellent | Daily use (recommended) |
+| LCM       | 4-6   | Ultra-fast | Good    | Quick preview |
 
-## 💡 提示
+## 💡 Tips
 
-1. **首次使用**: 从图形界面开始（`python apps/app_turbo_v2.py`）
-2. **批量处理**: 使用命令行脚本（`scripts/inference/cli_infer_turbo_v2.py`）
-3. **微调训练**: 参考 `training/README.md` 了解详细步骤
-4. **显存不足**: 减小 batch_size，使用 FP16，或使用更小的 lora_rank
+1. **First-time use**: Start with the GUI (`python apps/app_turbo_v2.py`)
+2. **Batch processing**: Use command-line scripts (`scripts/inference/cli_infer_turbo_v2.py`)
+3. **Fine-tuning**: Refer to `docs/TRAINING.md` for detailed steps
+4. **Out of memory**: Reduce batch_size, use FP16, or use smaller lora_rank
 
-## ❓ 常见问题
+## ❓ FAQ
 
-**Q: 如何切换不同版本的应用？**
+**Q: How to switch between different app versions?**
 ```bash
-# 原始版本（Euler）
+# Original version (Euler)
 python apps/app.py
 
-# Turbo v2（推荐，支持多调度器）
+# Turbo v2 (recommended, supports multiple schedulers)
 python apps/app_turbo_v2.py
 ```
 
-**Q: 训练数据应该放在哪里？**
+**Q: Where should training data be placed?**
 
-视频文件放在任意目录，然后在训练脚本中指定 `DATA_DIR` 路径。
+Place video files in any directory, then specify the `DATA_DIR` path in the training script.
 
-**Q: 如何查看所有可用参数？**
+**Q: How to view all available parameters?**
 ```bash
 python scripts/inference/cli_infer_turbo_v2.py --help
 python training/train_lora.py --help
 ```
 
-## 📞 获取帮助
+## 📞 Get Help
 
-- 查看详细文档: `STRUCTURE.md` 和 `training/README.md`
-- 查看示例: `assets/` 目录
-- 检查配置: `training/train_config.py`
+- View detailed documentation: `STRUCTURE.md` and `TRAINING.md`
+- Check examples: `assets/` directory
+- Review configuration: `training/train_config.py`
 
 ---
 

@@ -1,33 +1,33 @@
 # FramerTurbo LoRA Fine-tuning Guide
 
-这是 FramerTurbo 的 LoRA 微调训练代码。支持在自定义数据集上进行高效微调。
+This is the LoRA fine-tuning training code for FramerTurbo. Supports efficient fine-tuning on custom datasets.
 
-## 📋 特性
+## 📋 Features
 
-- ✅ **LoRA 高效微调**: 使用 PEFT 库，显存友好（~16-24GB）
-- ✅ **多种数据格式**: 支持视频文件或图像对
-- ✅ **混合精度训练**: 支持 FP16/BF16
-- ✅ **梯度累积**: 支持小显存训练
-- ✅ **Accelerate 集成**: 支持单卡/多卡训练
-- ✅ **灵活配置**: 可选训练 UNet 和/或 ControlNet
+- ✅ **Efficient LoRA Fine-tuning**: Uses PEFT library, memory-friendly (~16-24GB)
+- ✅ **Multiple Data Formats**: Supports video files or image pairs
+- ✅ **Mixed Precision Training**: Supports FP16/BF16
+- ✅ **Gradient Accumulation**: Enables training on limited memory
+- ✅ **Accelerate Integration**: Supports single/multi-GPU training
+- ✅ **Flexible Configuration**: Optional training for UNet and/or ControlNet
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-> **重要**: 请从 FramerTurbo 项目根目录运行所有命令！
+> **Important**: Run all commands from the FramerTurbo project root directory!
 
-### 1. 安装依赖
+### 1. Install Dependencies
 
 ```bash
-# 在项目根目录下
+# From project root directory
 pip install -r requirements.txt
 pip install accelerate peft wandb
 ```
 
-### 2. 准备数据集
+### 2. Prepare Dataset
 
-#### 方式 A: 视频文件（推荐）
+#### Option A: Video Files (Recommended)
 
-将视频文件放在一个目录下：
+Place video files in a directory:
 
 ```
 data/training_videos/
@@ -37,9 +37,9 @@ data/training_videos/
     ...
 ```
 
-#### 方式 B: 图像对
+#### Option B: Image Pairs
 
-将起始帧和结束帧配对：
+Pair start and end frames:
 
 ```
 data/image_pairs/
@@ -50,78 +50,78 @@ data/image_pairs/
     ...
 ```
 
-### 3. 配置训练脚本
+### 3. Configure Training Script
 
-编辑 `scripts/train_lora.sh`:
+Edit `scripts/train/train_lora.sh`:
 
 ```bash
-# 修改数据路径
-DATA_DIR="data/training_videos"  # 你的数据目录
+# Modify data path
+DATA_DIR="data/training_videos"  # Your data directory
 
-# 选择数据集类型
-DATASET_TYPE="video"  # 或 "image_pair"
+# Choose dataset type
+DATASET_TYPE="video"  # or "image_pair"
 
-# 调整训练参数
-BATCH_SIZE=1          # 根据显存调整
-GRADIENT_ACCUM=4      # 有效 batch size = BATCH_SIZE × GRADIENT_ACCUM
-EPOCHS=10             # 训练轮数
-LEARNING_RATE=1e-4    # 学习率
+# Adjust training parameters
+BATCH_SIZE=1          # Adjust based on GPU memory
+GRADIENT_ACCUM=4      # Effective batch size = BATCH_SIZE × GRADIENT_ACCUM
+EPOCHS=10             # Number of epochs
+LEARNING_RATE=1e-4    # Learning rate
 ```
 
-### 4. 启动训练
+### 4. Start Training
 
 ```bash
 cd FramerTurbo
-bash scripts/train_lora.sh
+bash scripts/train/train_lora.sh
 ```
 
-## ⚙️ 训练参数说明
+## ⚙️ Training Parameters
 
-### 核心参数
+### Core Parameters
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--pretrained_model_path` | 预训练模型路径 | `checkpoints/framer_512x320` |
-| `--data_dir` | 训练数据目录 | - |
-| `--output_dir` | 输出目录 | - |
-| `--dataset_type` | 数据集类型: `video` 或 `image_pair` | `video` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--pretrained_model_path` | Pre-trained model path | `checkpoints/framer_512x320` |
+| `--data_dir` | Training data directory | - |
+| `--output_dir` | Output directory | - |
+| `--dataset_type` | Dataset type: `video` or `image_pair` | `video` |
 
-### LoRA 参数
+### LoRA Parameters
 
-| 参数 | 说明 | 推荐值 |
-|------|------|--------|
-| `--lora_rank` | LoRA 秩（越大效果越好但显存越多） | 64 |
-| `--lora_alpha` | LoRA alpha（通常等于 rank） | 64 |
+| Parameter | Description | Recommended |
+|-----------|-------------|-------------|
+| `--lora_rank` | LoRA rank (higher = better quality but more memory) | 64 |
+| `--lora_alpha` | LoRA alpha (usually equals rank) | 64 |
 | `--lora_dropout` | LoRA dropout | 0.0 |
-| `--train_unet` | 训练 UNet（必选） | ✓ |
-| `--train_controlnet` | 训练 ControlNet（可选） | - |
+| `--train_unet` | Train UNet (required) | ✓ |
+| `--train_controlnet` | Train ControlNet (optional) | - |
 
-### 训练超参数
+### Training Hyperparameters
 
-| 参数 | 说明 | 推荐值 |
-|------|------|--------|
-| `--train_batch_size` | 每卡 batch size | 1 |
-| `--gradient_accumulation_steps` | 梯度累积步数 | 4-8 |
-| `--num_train_epochs` | 训练轮数 | 10-20 |
-| `--learning_rate` | 学习率 | 1e-4 |
-| `--mixed_precision` | 混合精度: `fp16` 或 `bf16` | `fp16` |
+| Parameter | Description | Recommended |
+|-----------|-------------|-------------|
+| `--train_batch_size` | Batch size per GPU | 1 |
+| `--gradient_accumulation_steps` | Gradient accumulation steps | 4-8 |
+| `--num_train_epochs` | Number of epochs | 10-20 |
+| `--learning_rate` | Learning rate | 1e-4 |
+| `--mixed_precision` | Mixed precision: `fp16` or `bf16` | `fp16` |
 
-## 💾 显存需求
+## 💾 Memory Requirements
 
-| 配置 | 显存需求 | 说明 |
-|------|----------|------|
-| LoRA (rank=64) + UNet | ~16-20 GB | 推荐配置 |
-| LoRA (rank=128) + UNet | ~20-24 GB | 更高质量 |
-| LoRA + UNet + ControlNet | ~24-32 GB | 完整训练 |
-| 全量微调 | ~40+ GB | 最佳效果 |
+| Configuration | Memory Required | Notes |
+|--------------|-----------------|-------|
+| LoRA (rank=64) + UNet | ~16-20 GB | Recommended |
+| LoRA (rank=128) + UNet | ~20-24 GB | Higher quality |
+| LoRA + UNet + ControlNet | ~24-32 GB | Full training |
+| Full fine-tuning | ~40+ GB | Best quality |
 
-**节省显存技巧**:
-- 减小 `--lora_rank` (如 32)
-- 减小 `--train_batch_size` 并增加 `--gradient_accumulation_steps`
-- 使用 `--mixed_precision fp16`
-- 减小 `--num_frames` (如 3 → 2)
+**Memory Saving Tips**:
+- Reduce `--lora_rank` (e.g., 32)
+- Reduce `--train_batch_size` and increase `--gradient_accumulation_steps`
+- Use `--mixed_precision fp16`
+- Reduce `--num_frames` (e.g., 3 → 2)
 
-## 📊 监控训练
+## 📊 Monitor Training
 
 ### TensorBoard
 
@@ -132,46 +132,46 @@ tensorboard --logdir logs
 ### Weights & Biases
 
 ```bash
-# 在训练脚本中添加
+# Add to training script
 USE_WANDB="--use_wandb"
 ```
 
-## 🔄 使用训练好的模型
+## 🔄 Use Trained Model
 
-### 加载 LoRA 权重
+### Load LoRA Weights
 
 ```python
 from peft import PeftModel
 from models_diffusers.unet_spatio_temporal_condition import UNetSpatioTemporalConditionModel
 
-# 加载基础模型
+# Load base model
 unet = UNetSpatioTemporalConditionModel.from_pretrained(
     "checkpoints/framer_512x320/unet",
     torch_dtype=torch.float16,
 )
 
-# 加载 LoRA 权重
+# Load LoRA weights
 unet = PeftModel.from_pretrained(
     unet,
     "outputs/lora_finetune/final/unet_lora",
 )
 
-# 合并 LoRA（可选，用于推理加速）
+# Merge LoRA (optional, for inference speedup)
 unet = unet.merge_and_unload()
 ```
 
-### 推理示例
+### Inference Example
 
 ```python
-# 将微调后的 UNet 集成到推理 pipeline
+# Integrate fine-tuned UNet into inference pipeline
 pipe = StableVideoDiffusionInterpControlPipeline.from_pretrained(
     "checkpoints/stable-video-diffusion-img2vid-xt",
-    unet=unet,  # 使用微调后的 UNet
+    unet=unet,  # Use fine-tuned UNet
     controlnet=controlnet,
     torch_dtype=torch.float16,
 )
 
-# 正常推理
+# Normal inference
 frames = pipe(
     first_image,
     last_image,
@@ -180,18 +180,18 @@ frames = pipe(
 ).frames
 ```
 
-## 🛠️ 高级用法
+## 🛠️ Advanced Usage
 
-### 多卡训练
+### Multi-GPU Training
 
-使用 Accelerate 配置文件:
+Use Accelerate configuration:
 
 ```bash
-accelerate config  # 配置多卡设置
-accelerate launch training/train_lora.py ...  # 自动多卡训练
+accelerate config  # Configure multi-GPU settings
+accelerate launch training/train_lora.py ...  # Automatic multi-GPU training
 ```
 
-### 从检查点恢复
+### Resume from Checkpoint
 
 ```bash
 python training/train_lora.py \
@@ -199,16 +199,16 @@ python training/train_lora.py \
   ...
 ```
 
-### 仅训练 ControlNet
+### Train ControlNet Only
 
 ```bash
 python training/train_lora.py \
-  --train_controlnet \  # 只训练 ControlNet
-  --learning_rate 5e-5 \  # ControlNet 建议更小的学习率
+  --train_controlnet \  # Train only ControlNet
+  --learning_rate 5e-5 \  # Smaller learning rate recommended for ControlNet
   ...
 ```
 
-### 混合训练（UNet LoRA + ControlNet 全量）
+### Mixed Training (UNet LoRA + Full ControlNet)
 
 ```bash
 python training/train_lora.py \
@@ -218,63 +218,63 @@ python training/train_lora.py \
   ...
 ```
 
-## 📁 输出结构
+## 📁 Output Structure
 
 ```
 outputs/lora_finetune/
 ├── checkpoint-500/
-│   └── unet_lora/          # LoRA 权重检查点
+│   └── unet_lora/          # LoRA weights checkpoint
 ├── checkpoint-1000/
 │   └── unet_lora/
 └── final/
-    └── unet_lora/          # 最终 LoRA 权重
+    └── unet_lora/          # Final LoRA weights
         ├── adapter_config.json
         └── adapter_model.safetensors
 ```
 
-## ❓ 常见问题
+## ❓ FAQ
 
-### Q: 训练过程中显存溢出怎么办？
+### Q: Out of memory during training?
 
-A: 尝试以下方法：
-1. 减小 `--train_batch_size` 至 1
-2. 增加 `--gradient_accumulation_steps` 至 8 或更高
-3. 减小 `--lora_rank` 至 32 或 16
-4. 减小 `--num_frames` 至 2
+A: Try these solutions:
+1. Reduce `--train_batch_size` to 1
+2. Increase `--gradient_accumulation_steps` to 8 or higher
+3. Reduce `--lora_rank` to 32 or 16
+4. Reduce `--num_frames` to 2
 
-### Q: 训练多少步合适？
+### Q: How many training steps are appropriate?
 
-A: 取决于数据集大小：
-- 小数据集 (< 100 视频): 10-20 epochs
-- 中数据集 (100-1000 视频): 5-10 epochs
-- 大数据集 (> 1000 视频): 2-5 epochs
+A: Depends on dataset size:
+- Small dataset (< 100 videos): 10-20 epochs
+- Medium dataset (100-1000 videos): 5-10 epochs
+- Large dataset (> 1000 videos): 2-5 epochs
 
-建议每 500 步保存检查点，根据验证效果选择最佳模型。
+Recommend saving checkpoints every 500 steps, choose the best model based on validation performance.
 
-### Q: 如何调整学习率？
+### Q: How to adjust learning rate?
 
-A: 参考建议：
-- LoRA 训练: `1e-4` 到 `5e-5`
-- ControlNet 训练: `5e-5` 到 `1e-5`
-- 如果 loss 不下降，尝试提高学习率
-- 如果 loss 震荡，尝试降低学习率
+A: Recommended values:
+- LoRA training: `1e-4` to `5e-5`
+- ControlNet training: `5e-5` to `1e-5`
+- If loss doesn't decrease, try increasing learning rate
+- If loss oscillates, try decreasing learning rate
 
-### Q: 支持自定义轨迹标注吗？
+### Q: Support for custom trajectory annotations?
 
-A: 当前版本的训练代码暂未集成轨迹点标注。如需训练轨迹控制能力，需要：
-1. 准备带轨迹标注的数据集
-2. 修改 `train_dataset.py` 加载轨迹数据
-3. 在 `train_lora.py` 中添加 ControlNet 条件
+A: The current training code doesn't integrate trajectory point annotations. To train trajectory control:
+1. Prepare dataset with trajectory annotations
+2. Modify `train_dataset.py` to load trajectory data
+3. Add ControlNet conditioning in `train_lora.py`
 
-我们计划在后续版本中添加完整的轨迹标注训练支持。
+We plan to add full trajectory annotation training support in future versions.
 
-## 📚 参考资料
+## 📚 References
 
-- [LoRA 论文](https://arxiv.org/abs/2106.09685)
-- [PEFT 文档](https://huggingface.co/docs/peft)
-- [Accelerate 文档](https://huggingface.co/docs/accelerate)
-- [FramerTurbo 论文](https://arxiv.org/abs/2410.18978)
+- [LoRA Paper](https://arxiv.org/abs/2106.09685)
+- [PEFT Documentation](https://huggingface.co/docs/peft)
+- [Accelerate Documentation](https://huggingface.co/docs/accelerate)
+- [FramerTurbo Paper](https://arxiv.org/abs/2410.18978)
 
-## 📝 许可证
+## 📝 License
 
-本训练代码遵循 FramerTurbo 的许可证。
+This training code follows the FramerTurbo license.
