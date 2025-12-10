@@ -35,8 +35,14 @@ Framer
 - [2024/10/28]. Huggingface Gradio Demo is now available [here](https://huggingface.co/spaces/wwen1997/Framer)!
 - [2024/10/25]. Launch the project page and upload the arXiv preprint.
 
+## 📚 Documentation
 
-  
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Get started in 5 minutes
+- **[Training Guide](docs/TRAINING.md)** - LoRA fine-tuning tutorial
+- **[Project Structure](docs/STRUCTURE.md)** - Directory organization
+- **[Full Documentation](docs/)** - Complete documentation index
+
+
 ## 🔆 TL;DR
 
 We propose Framer, a more controllable and interactive frame interpolation method that allows users to produce smoothly transitioning frames between two images by customizing the trajectory of selected keypoints, enhancing control and handling challenging cases. 
@@ -294,8 +300,22 @@ checkpoints/
 ### Run gradio locally
 
 ```bash
-python app.py
+# Original version (Euler scheduler)
+python apps/app.py
+
+# Turbo v2 version (supports multiple schedulers - recommended)
+python apps/app_turbo_v2.py
 ```
+
+**Command-line inference** (for batch processing):
+```bash
+python scripts/inference/cli_infer_turbo_v2.py \
+    --input_dir assets/test_single \
+    --model checkpoints/framer_512x320 \
+    --output_dir outputs
+```
+
+📖 For more usage details, see [Quick Start Guide](docs/QUICKSTART.md).
 
 Some example inputs are presented in `./examples`, enjoy the interactive frame interpolation!
 

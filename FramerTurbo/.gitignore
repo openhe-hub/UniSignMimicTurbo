@@ -183,4 +183,5 @@ tags
 # wandb
 wandb
 outputs
+logs
 *.txt

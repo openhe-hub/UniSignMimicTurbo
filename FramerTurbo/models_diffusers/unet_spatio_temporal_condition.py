@@ -25,14 +25,38 @@ from functools import partial
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 from diffusers import __version__
+
+# Handle diffusers version compatibility for constants
+try:
+    # Try importing from diffusers.utils.constants (0.25.0+)
+    from diffusers.utils.constants import (
+        CONFIG_NAME,
+        WEIGHTS_NAME,
+        SAFETENSORS_WEIGHTS_NAME,
+        FLAX_WEIGHTS_NAME,
+        MIN_PEFT_VERSION,
+    )
+except ImportError:
+    # Fallback for older versions
+    from diffusers.utils import (
+        CONFIG_NAME,
+        WEIGHTS_NAME,
+        SAFETENSORS_WEIGHTS_NAME,
+        FLAX_WEIGHTS_NAME,
+        MIN_PEFT_VERSION,
+    )
+
+# HF_HUB_OFFLINE is from huggingface_hub, diffusers re-exports it
+try:
+    from diffusers.utils import HF_HUB_OFFLINE
+except ImportError:
+    from huggingface_hub.constants import HF_HUB_OFFLINE
+
+# DIFFUSERS_CACHE was removed in newer versions
+# Use cache_dir parameter in from_pretrained() instead
+DIFFUSERS_CACHE = None  # Not used in modern diffusers
+
 from diffusers.utils import (
-    CONFIG_NAME,
-    DIFFUSERS_CACHE,
-    FLAX_WEIGHTS_NAME,
-    HF_HUB_OFFLINE,
-    MIN_PEFT_VERSION,
-    SAFETENSORS_WEIGHTS_NAME,
-    WEIGHTS_NAME,
     _add_variant,
     _get_model_file,
     check_peft_version,
@@ -706,6 +730,23 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None)
 
+        # Handle token parameter compatibility (huggingface_hub API change)
+        # New versions use 'token' instead of 'use_auth_token'
+        token = use_auth_token
+
+        # Check if _get_model_file supports 'token' parameter
+        import inspect
+        get_model_file_sig = inspect.signature(_get_model_file)
+        supports_token = 'token' in get_model_file_sig.parameters
+
+        # Prepare auth argument for _get_model_file calls
+        if supports_token:
+            auth_arg_name = 'token'
+            auth_arg_value = token
+        else:
+            auth_arg_name = 'use_auth_token'
+            auth_arg_value = use_auth_token
+
         allow_pickle = False
         if use_safetensors is None:
             use_safetensors = True
@@ -790,11 +831,11 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
                 revision=revision,
                 subfolder=subfolder,
                 user_agent=user_agent,
                 commit_hash=commit_hash,
+                **{auth_arg_name: auth_arg_value}
             )
             model = cls.from_config(config, **unused_kwargs)
 
@@ -813,11 +854,11 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
                         resume_download=resume_download,
                         proxies=proxies,
                         local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
                         revision=revision,
                         subfolder=subfolder,
                         user_agent=user_agent,
                         commit_hash=commit_hash,
+                        **{auth_arg_name: auth_arg_value}
                     )
                 except IOError as e:
                     if not allow_pickle:
@@ -832,11 +873,11 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
                     resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
                     revision=revision,
                     subfolder=subfolder,
                     user_agent=user_agent,
                     commit_hash=commit_hash,
+                    **{auth_arg_name: auth_arg_value}
                 )
 
             if low_cpu_mem_usage:
