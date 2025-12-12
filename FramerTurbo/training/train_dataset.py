@@ -94,16 +94,30 @@ class VideoFrameDataset(Dataset):
         Sample frame indices for training.
         Returns indices for [start_frame, end_frame] and intermediate frames.
         """
+        # Validate total_frames - this should catch videos with insufficient frames
+        if total_frames < self.num_frames:
+            raise ValueError(
+                f"Video has insufficient frames: {total_frames} frames available, "
+                f"but {self.num_frames} frames required. "
+                f"This video should have been filtered during dataset creation."
+            )
+
         # Ensure we have enough frames to sample
         max_start_idx = total_frames - (self.num_frames - 1) * self.sample_stride - 1
 
         if max_start_idx < 0:
-            # If video is too short, just sample uniformly
+            # If stride is too large, sample uniformly across the video
             indices = np.linspace(0, total_frames - 1, self.num_frames, dtype=int).tolist()
         else:
             # Random start index
             start_idx = random.randint(0, max_start_idx)
             indices = [start_idx + i * self.sample_stride for i in range(self.num_frames)]
+
+        # Final validation
+        assert len(indices) == self.num_frames, \
+            f"Expected {self.num_frames} indices, got {len(indices)}"
+        assert all(0 <= idx < total_frames for idx in indices), \
+            f"Invalid indices {indices} for video with {total_frames} frames"
 
         return indices
 

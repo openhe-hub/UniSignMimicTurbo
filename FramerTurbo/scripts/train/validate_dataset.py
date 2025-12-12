@@ -127,21 +127,51 @@ def validate_video_dataset(data_dir):
     print("=" * 70)
 
     try:
+        # Test with 10 frames @ 576x576 (current training config)
         dataset = VideoFrameDataset(
             video_dir=data_dir,
-            num_frames=3,
-            height=320,
-            width=512,
+            num_frames=10,
+            height=576,
+            width=576,
             min_video_frames=16,
         )
 
-        print(f"✓ 数据集创建成功")
+        print(f"✓ 数据集创建成功 (10 frames @ 576x576)")
         print(f"✓ 可用样本数: {len(dataset)}")
 
-        # 测试加载第一个样本
-        print(f"\n测试加载样本...")
+        # Test loading all samples to find problematic ones
+        print(f"\n测试加载所有样本...")
+        problematic_samples = []
+
+        for idx in range(len(dataset)):
+            try:
+                sample = dataset[idx]
+
+                # Validate shape
+                expected_shape = (10, 3, 576, 576)
+                if sample['pixel_values'].shape != expected_shape:
+                    problematic_samples.append((idx, sample['video_path'], f"Wrong shape: {sample['pixel_values'].shape}"))
+
+                # Progress indicator
+                if (idx + 1) % 50 == 0:
+                    print(f"  验证进度: {idx + 1}/{len(dataset)}")
+
+            except Exception as e:
+                problematic_samples.append((idx, dataset.video_files[idx], str(e)))
+
+        print(f"✓ 完成所有样本验证")
+
+        if problematic_samples:
+            print(f"\n❌ 发现 {len(problematic_samples)} 个问题样本:")
+            for idx, path, error in problematic_samples[:10]:
+                print(f"  [{idx}] {os.path.basename(path)}: {error}")
+            if len(problematic_samples) > 10:
+                print(f"  ... 还有 {len(problematic_samples) - 10} 个")
+            return False
+
+        # Show first sample details
         sample = dataset[0]
-        print(f"✓ 样本形状: {sample['pixel_values'].shape}")
+        print(f"\n第一个样本详情:")
         print(f"  - pixel_values: {sample['pixel_values'].shape}")
         print(f"  - first_frame: {sample['first_frame'].shape}")
         print(f"  - last_frame: {sample['last_frame'].shape}")

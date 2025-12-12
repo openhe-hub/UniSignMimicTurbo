@@ -478,169 +478,170 @@ def main():
         controlnet.train() if args.train_controlnet else None
 
         for step, batch in enumerate(train_dataloader):
-            with accelerator.accumulate(unet if args.train_unet else controlnet):
-                # Get batch data
-                pixel_values = batch["pixel_values"]  # (B, num_frames, 3, H, W)
-                first_frames = batch["first_frames"]  # (B, 3, H, W)
-                last_frames = batch["last_frames"]    # (B, 3, H, W)
+            # DeepSpeed handles gradient accumulation internally
+            # Skip accelerator.accumulate() to avoid conflict with ZeRO Stage 2
+            # Get batch data
+            pixel_values = batch["pixel_values"]  # (B, num_frames, 3, H, W)
+            first_frames = batch["first_frames"]  # (B, 3, H, W)
+            last_frames = batch["last_frames"]    # (B, 3, H, W)
 
-                batch_size = pixel_values.shape[0]
+            batch_size = pixel_values.shape[0]
 
-                # Encode images to latents
-                with torch.no_grad():
-                    # Encode all frames
-                    b, f, c, h, w = pixel_values.shape
-                    pixel_values_flat = pixel_values.reshape(b * f, c, h, w)
+            # Encode images to latents
+            with torch.no_grad():
+                # Encode all frames
+                b, f, c, h, w = pixel_values.shape
+                pixel_values_flat = pixel_values.reshape(b * f, c, h, w)
 
-                    # Convert to same dtype as VAE (fix dtype mismatch)
-                    pixel_values_flat = pixel_values_flat.to(dtype=vae.dtype)
+                # Convert to same dtype as VAE (fix dtype mismatch)
+                pixel_values_flat = pixel_values_flat.to(dtype=vae.dtype)
 
-                    # VAE encoding
-                    latents = vae.encode(pixel_values_flat).latent_dist.sample()
-                    latents = latents * vae.config.scaling_factor
-                    latents = latents.reshape(b, f, *latents.shape[1:])  # (B, F, C, H, W)
+                # VAE encoding
+                latents = vae.encode(pixel_values_flat).latent_dist.sample()
+                latents = latents * vae.config.scaling_factor
+                latents = latents.reshape(b, f, *latents.shape[1:])  # (B, F, C, H, W)
 
-                    # Prepare frames for CLIP (requires 224x224)
-                    # Resize first/last frames to 224x224 for CLIP encoder
-                    first_frames_clip = F.interpolate(
-                        first_frames,
-                        size=(224, 224),
-                        mode='bicubic',
-                        align_corners=False
-                    ).to(dtype=image_encoder.dtype)
+                # Prepare frames for CLIP (requires 224x224)
+                # Resize first/last frames to 224x224 for CLIP encoder
+                first_frames_clip = F.interpolate(
+                    first_frames,
+                    size=(224, 224),
+                    mode='bicubic',
+                    align_corners=False
+                ).to(dtype=image_encoder.dtype)
 
-                    last_frames_clip = F.interpolate(
-                        last_frames,
-                        size=(224, 224),
-                        mode='bicubic',
-                        align_corners=False
-                    ).to(dtype=image_encoder.dtype)
+                last_frames_clip = F.interpolate(
+                    last_frames,
+                    size=(224, 224),
+                    mode='bicubic',
+                    align_corners=False
+                ).to(dtype=image_encoder.dtype)
 
-                    # Encode image conditions with CLIP
-                    # Shape: (B, hidden_dim) -> (B, 1, hidden_dim)
-                    first_frame_embeds = image_encoder(first_frames_clip).image_embeds.unsqueeze(1)
-                    last_frame_embeds = image_encoder(last_frames_clip).image_embeds.unsqueeze(1)
+                # Encode image conditions with CLIP
+                # Shape: (B, hidden_dim) -> (B, 1, hidden_dim)
+                first_frame_embeds = image_encoder(first_frames_clip).image_embeds.unsqueeze(1)
+                last_frame_embeds = image_encoder(last_frames_clip).image_embeds.unsqueeze(1)
 
-                    # Clean up temporary tensors to save memory
-                    del first_frames_clip, last_frames_clip, pixel_values_flat
+                # Clean up temporary tensors to save memory
+                del first_frames_clip, last_frames_clip, pixel_values_flat
 
-                # Sample noise
-                noise = torch.randn_like(latents)
+            # Sample noise
+            noise = torch.randn_like(latents)
 
-                # Add noise offset for better training stability
-                if args.noise_offset > 0:
-                    noise += args.noise_offset * torch.randn(
-                        (latents.shape[0], latents.shape[1], 1, 1, 1),
-                        device=latents.device
-                    )
-
-                # Sample random timesteps
-                timesteps = torch.randint(
-                    0,
-                    noise_scheduler.config.num_train_timesteps,
-                    (batch_size,),
-                    device=latents.device,
-                ).long()
-
-                # Add noise to latents
-                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-
-                # Prepare conditional latents for FramerTurbo
-                # The model expects: [noisy_latents (4ch), conditional_latents (4ch), mask (1ch)] = 9 channels
-                with torch.no_grad():
-                    # Get first and last frame latents (clean, without noise)
-                    first_frame_latent = latents[:, 0:1, :, :, :]  # (B, 1, 4, H, W)
-                    last_frame_latent = latents[:, -1:, :, :, :]   # (B, 1, 4, H, W)
-
-                    # Get mask token from UNet and create middle frames
-                    num_frames = latents.shape[1]
-                    _, _, latent_c, latent_h, latent_w = latents.shape
-
-                    # Access mask_token from the base model (unwrap if using PEFT)
-                    if hasattr(unet, 'get_base_model'):
-                        mask_token = unet.get_base_model().mask_token
-                    else:
-                        mask_token = unet.mask_token
-
-                    # Create mask tokens for middle frames
-                    if num_frames > 2:
-                        conditional_latents_mask = mask_token.repeat(batch_size, num_frames - 2, 1, latent_h, latent_w)
-                        # Concatenate: first + middle(mask) + last
-                        conditional_latents = torch.cat([first_frame_latent, conditional_latents_mask, last_frame_latent], dim=1)
-                    else:
-                        # If only 2 frames, just use first and last
-                        conditional_latents = torch.cat([first_frame_latent, last_frame_latent], dim=1)
-
-                    # Create mask channel: 0 for known frames (first and last), 1 for unknown
-                    mask_channel = torch.ones((batch_size, num_frames, 1, latent_h, latent_w),
-                                             dtype=conditional_latents.dtype,
-                                             device=conditional_latents.device)
-                    mask_channel[:, 0:1, :, :, :] = 0  # First frame is known
-                    mask_channel[:, -1:, :, :, :] = 0  # Last frame is known
-
-                    # Concatenate conditional latents with mask channel: (B, F, 5, H, W)
-                    conditional_latents = torch.cat([conditional_latents, mask_channel], dim=2)
-
-                # Concatenate noisy latents with conditional latents: (B, F, 9, H, W)
-                latent_model_input = torch.cat([noisy_latents, conditional_latents], dim=2)
-
-                # Prepare added_time_ids for SVD (fps, motion_bucket_id, noise_aug_strength)
-                # Using default values for training
-                fps = 7  # SVD default
-                motion_bucket_id = 127  # Medium motion
-                noise_aug_strength = 0.0  # No noise augmentation during training
-
-                add_time_ids = torch.tensor(
-                    [[fps, motion_bucket_id, noise_aug_strength]],
-                    dtype=latent_model_input.dtype,
-                    device=latent_model_input.device,
+            # Add noise offset for better training stability
+            if args.noise_offset > 0:
+                noise += args.noise_offset * torch.randn(
+                    (latents.shape[0], latents.shape[1], 1, 1, 1),
+                    device=latents.device
                 )
-                add_time_ids = add_time_ids.repeat(batch_size, 1)
 
-                # Predict noise with UNet
-                # For now, we skip ControlNet conditioning to simplify
-                # You can add trajectory point conditioning here if needed
+            # Sample random timesteps
+            timesteps = torch.randint(
+                0,
+                noise_scheduler.config.num_train_timesteps,
+                (batch_size,),
+                device=latents.device,
+            ).long()
 
-                # Debug: print shapes before UNet forward
-                if step == 0 and accelerator.is_main_process:
-                    print(f"\n[DEBUG] First batch shapes:")
-                    print(f"  pixel_values: {pixel_values.shape}")
-                    print(f"  latents: {latents.shape}")
-                    print(f"  noisy_latents: {noisy_latents.shape}")
-                    print(f"  conditional_latents: {conditional_latents.shape}")
-                    print(f"  latent_model_input: {latent_model_input.shape}")
-                    print(f"  first_frame_embeds: {first_frame_embeds.shape}")
-                    print(f"  last_frame_embeds: {last_frame_embeds.shape}")
-                    print(f"  timesteps: {timesteps.shape}")
-                    print(f"  add_time_ids: {add_time_ids.shape}")
+            # Add noise to latents
+            noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-                model_pred = unet(
-                    latent_model_input,
-                    timesteps,
-                    encoder_hidden_states=torch.cat([first_frame_embeds, last_frame_embeds], dim=1),
-                    added_time_ids=add_time_ids,
-                ).sample
+            # Prepare conditional latents for FramerTurbo
+            # The model expects: [noisy_latents (4ch), conditional_latents (4ch), mask (1ch)] = 9 channels
+            with torch.no_grad():
+                # Get first and last frame latents (clean, without noise)
+                first_frame_latent = latents[:, 0:1, :, :, :]  # (B, 1, 4, H, W)
+                last_frame_latent = latents[:, -1:, :, :, :]   # (B, 1, 4, H, W)
 
-                # Calculate loss
-                if args.prediction_type == "epsilon":
-                    target = noise
-                elif args.prediction_type == "v_prediction":
-                    target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                # Get mask token from UNet and create middle frames
+                num_frames = latents.shape[1]
+                _, _, latent_c, latent_h, latent_w = latents.shape
+
+                # Access mask_token from the base model (unwrap if using PEFT)
+                if hasattr(unet, 'get_base_model'):
+                    mask_token = unet.get_base_model().mask_token
                 else:
-                    raise ValueError(f"Unknown prediction type {args.prediction_type}")
+                    mask_token = unet.mask_token
 
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                # Create mask tokens for middle frames
+                if num_frames > 2:
+                    conditional_latents_mask = mask_token.repeat(batch_size, num_frames - 2, 1, latent_h, latent_w)
+                    # Concatenate: first + middle(mask) + last
+                    conditional_latents = torch.cat([first_frame_latent, conditional_latents_mask, last_frame_latent], dim=1)
+                else:
+                    # If only 2 frames, just use first and last
+                    conditional_latents = torch.cat([first_frame_latent, last_frame_latent], dim=1)
 
-                # Backpropagate
-                accelerator.backward(loss)
+                # Create mask channel: 0 for known frames (first and last), 1 for unknown
+                mask_channel = torch.ones((batch_size, num_frames, 1, latent_h, latent_w),
+                                         dtype=conditional_latents.dtype,
+                                         device=conditional_latents.device)
+                mask_channel[:, 0:1, :, :, :] = 0  # First frame is known
+                mask_channel[:, -1:, :, :, :] = 0  # Last frame is known
 
-                if accelerator.sync_gradients:
-                    params_to_clip = trainable_params
-                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                # Concatenate conditional latents with mask channel: (B, F, 5, H, W)
+                conditional_latents = torch.cat([conditional_latents, mask_channel], dim=2)
 
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+            # Concatenate noisy latents with conditional latents: (B, F, 9, H, W)
+            latent_model_input = torch.cat([noisy_latents, conditional_latents], dim=2)
+
+            # Prepare added_time_ids for SVD (fps, motion_bucket_id, noise_aug_strength)
+            # Using default values for training
+            fps = 7  # SVD default
+            motion_bucket_id = 127  # Medium motion
+            noise_aug_strength = 0.0  # No noise augmentation during training
+
+            add_time_ids = torch.tensor(
+                [[fps, motion_bucket_id, noise_aug_strength]],
+                dtype=latent_model_input.dtype,
+                device=latent_model_input.device,
+            )
+            add_time_ids = add_time_ids.repeat(batch_size, 1)
+
+            # Predict noise with UNet
+            # For now, we skip ControlNet conditioning to simplify
+            # You can add trajectory point conditioning here if needed
+
+            # Debug: print shapes before UNet forward
+            if step == 0 and accelerator.is_main_process:
+                print(f"\n[DEBUG] First batch shapes:")
+                print(f"  pixel_values: {pixel_values.shape}")
+                print(f"  latents: {latents.shape}")
+                print(f"  noisy_latents: {noisy_latents.shape}")
+                print(f"  conditional_latents: {conditional_latents.shape}")
+                print(f"  latent_model_input: {latent_model_input.shape}")
+                print(f"  first_frame_embeds: {first_frame_embeds.shape}")
+                print(f"  last_frame_embeds: {last_frame_embeds.shape}")
+                print(f"  timesteps: {timesteps.shape}")
+                print(f"  add_time_ids: {add_time_ids.shape}")
+
+            model_pred = unet(
+                latent_model_input,
+                timesteps,
+                encoder_hidden_states=torch.cat([first_frame_embeds, last_frame_embeds], dim=1),
+                added_time_ids=add_time_ids,
+            ).sample
+
+            # Calculate loss
+            if args.prediction_type == "epsilon":
+                target = noise
+            elif args.prediction_type == "v_prediction":
+                target = noise_scheduler.get_velocity(latents, noise, timesteps)
+            else:
+                raise ValueError(f"Unknown prediction type {args.prediction_type}")
+
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+
+            # Backpropagate
+            accelerator.backward(loss)
+
+            if accelerator.sync_gradients:
+                params_to_clip = trainable_params
+                accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
 
             # Update progress
             if accelerator.sync_gradients:

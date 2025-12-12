@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# FramerTurbo LoRA Fine-tuning Script
-# Optimized for A100 GPU with 576x576 resolution
+# FramerTurbo LoRA Fine-tuning Script - 3-GPU with DeepSpeed
+# Optimized for 3x A100/V100 GPUs with 576x576 resolution @ 10 frames
 
 # ============================================================================
 # Configuration
@@ -10,49 +10,45 @@
 # Paths
 PRETRAINED_MODEL="checkpoints/framer_512x320"
 SVD_MODEL="checkpoints/stable-video-diffusion-img2vid-xt"
-DATA_DIR="assets/AslToHiya-01"  # Change this to your data directory
-OUTPUT_DIR="outputs/lora_576x576_f10"
+DATA_DIR="assets/AslToHiya-01"
+OUTPUT_DIR="outputs/lora_576x576_10f_3gpu"
 
-# Dataset settings - 576x576 for sign language videos
-DATASET_TYPE="video"  # Options: "video" or "image_pair"
+# Dataset settings - 576x576 @ 10 frames
+DATASET_TYPE="video"
 NUM_FRAMES=10
-HEIGHT=576    # Optimized for your 576x576 videos
-WIDTH=576     # Optimized for your 576x576 videos
+HEIGHT=576
+WIDTH=576
 
-# Training hyperparameters - A100 optimized for 576x576 with gradient checkpointing
-BATCH_SIZE=1              # Reduced for 576x576 resolution
-GRADIENT_ACCUM=8          # Effective batch = 1 x 8 = 8
-EPOCHS=30                 # Train for 30 epochs first
+# Training hyperparameters - 3-GPU optimized
+NUM_GPUS=3
+BATCH_SIZE=1              # Per GPU batch size
+GRADIENT_ACCUM=3          # Effective batch = 3 GPUs x 1 x 3 = 9 (close to 8)
+EPOCHS=30
 LEARNING_RATE=1e-4
 LR_SCHEDULER="constant_with_warmup"
 WARMUP_STEPS=500
 
-# LoRA settings - Reduced rank to save memory
+# LoRA settings - Keep full rank for quality
 LORA_RANK=64
-LORA_ALPHA=64             # Match rank
+LORA_ALPHA=64
 LORA_DROPOUT=0.0
 
 # Mixed precision - BF16 for A100
-MIXED_PRECISION="bf16"    # A100 supports BF16 better than FP16
+MIXED_PRECISION="bf16"
 
-# Checkpointing - More frequent saves
-CHECKPOINT_STEPS=200      # Save every 200 steps (was 500)
+# DeepSpeed config
+DEEPSPEED_CONFIG="configs/deepspeed_zero2.json"  # Use zero3 for V100-32GB
+ACCELERATE_CONFIG="configs/accelerate_config_3gpu.yaml"
 
-# Set CUDA_HOME for DeepSpeed (modify if your CUDA is in a different location)
-module load cuda/12.2.0
-export CUDA_HOME=${CUDA_HOME:/share/apps/NYUAD5/cuda/12.2.0/}
-export PATH=$CUDA_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-
-echo "CUDA_HOME: $CUDA_HOME"
-echo ""
+# Checkpointing
+CHECKPOINT_STEPS=200
 
 # Logging
 USE_WANDB=""  # Add "--use_wandb" to enable W&B logging
-WANDB_PROJECT="framer-turbo-lora-576"
+WANDB_PROJECT="framer-turbo-lora-10f-3gpu"
 
 # GPU settings
-NUM_WORKERS=8             # A100 can handle more workers
+NUM_WORKERS=8
 SEED=42
 
 # ============================================================================
@@ -60,24 +56,30 @@ SEED=42
 # ============================================================================
 
 echo "========================================="
-echo "FramerTurbo LoRA Fine-tuning"
+echo "FramerTurbo LoRA Multi-GPU Training"
 echo "========================================="
+echo "GPUs: $NUM_GPUS"
 echo "Model: $PRETRAINED_MODEL"
-echo "Resolution: ${WIDTH}x${HEIGHT}"
+echo "Resolution: ${WIDTH}x${HEIGHT} @ ${NUM_FRAMES} frames"
 echo "Data: $DATA_DIR"
 echo "Output: $OUTPUT_DIR"
-echo "Batch size: $BATCH_SIZE x $GRADIENT_ACCUM (effective: $((BATCH_SIZE * GRADIENT_ACCUM)))"
+echo "Batch size: $NUM_GPUS x $BATCH_SIZE x $GRADIENT_ACCUM (effective: $((NUM_GPUS * BATCH_SIZE * GRADIENT_ACCUM)))"
 echo "LoRA rank: $LORA_RANK"
+echo "DeepSpeed: $DEEPSPEED_CONFIG"
 echo "Mixed precision: $MIXED_PRECISION"
 echo "========================================="
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
 cd "$PROJECT_ROOT"
 
-accelerate launch training/train_lora.py \
+# Launch with accelerate + DeepSpeed
+accelerate launch \
+  --config_file "$ACCELERATE_CONFIG" \
+  --num_processes $NUM_GPUS \
+  training/train_lora.py \
   --pretrained_model_path "$PRETRAINED_MODEL" \
   --svd_model_path "$SVD_MODEL" \
   --data_dir "$DATA_DIR" \
