@@ -7,7 +7,11 @@ import re
 import argparse
 from pathlib import Path
 from typing import List, Dict, Tuple
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
 import numpy as np
 
 

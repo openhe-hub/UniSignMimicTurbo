@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=Framer576
-#SBATCH --output=framer_576_%j.out
-#SBATCH --error=framer_576_%j.err
+#SBATCH --output=logs/framer_576_%A_%a.out
+#SBATCH --error=logs/framer_576_%A_%a.err
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -9,6 +9,7 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --partition=nvidia
+#SBATCH --array=1-8                    # 8 parts -> 8 subfolders
 
 # ============================================================================
 # Framer 576x576 Inference - Euler Scheduler (30 steps)
@@ -24,19 +25,29 @@ nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
 echo "=============================================================================="
 echo ""
 
-# ============================================================================
-# Configuration
-# ============================================================================
+IDX=$(printf "%d" "$SLURM_ARRAY_TASK_ID")   # 1..8
 
-INPUT_DIR="assets/test02"
-OUTPUT_DIR="outputs/test02"
+# Input/output roots (override via env if needed)
+BOUNDARY_ROOT="assets/boundary_frames"
+OUTPUT_ROOT="outputs"
+
+# Assign subfolder by array index (part_1 ... part_8)
+FOLDERS=(part_1 part_2 part_3 part_4 part_5 part_6 part_7 part_8)
+ARR_IDX=$((IDX-1))
+INPUT_SUBDIR=${FOLDERS[$ARR_IDX]}
+
+INPUT_DIR="${BOUNDARY_ROOT}/${INPUT_SUBDIR}"
+OUTPUT_DIR="${OUTPUT_ROOT}/${INPUT_SUBDIR}"
 MODEL_DIR="checkpoints/framer_512x320"
 
-echo "Configuration:"
-echo "  Input:  $INPUT_DIR"
-echo "  Output: $OUTPUT_DIR"
-echo "  Model:  $MODEL_DIR"
-echo ""
+if [[ ! -d "${INPUT_DIR}" ]]; then
+  echo "Input dir not found: ${INPUT_DIR}"
+  exit 1
+fi
+mkdir -p "${OUTPUT_DIR}"
+
+echo "Using input_dir=${INPUT_DIR}"
+echo "Output to ${OUTPUT_DIR}"
 
 # ============================================================================
 # Run Inference (High Quality Settings)

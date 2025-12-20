@@ -28,7 +28,7 @@ from typing import List, Tuple, Dict
 # Add FramerTurbo to path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from app_turbo_v2 import Drag, get_args, configure_scheduler
+from apps.app_turbo_v2 import Drag, get_args, configure_scheduler
 from gradio_demo.utils_drag import ensure_dirname
 
 

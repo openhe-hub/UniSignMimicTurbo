@@ -2,7 +2,7 @@ import os
 import time
 from typing import Dict, List, Tuple
 
-from app_turbo_v2 import Drag, get_args, configure_scheduler
+from apps.app_turbo_v2 import Drag, get_args, configure_scheduler
 from gradio_demo.utils_drag import ensure_dirname
 
 

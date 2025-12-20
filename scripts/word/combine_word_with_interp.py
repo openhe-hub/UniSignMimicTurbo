@@ -341,9 +341,10 @@ def process_sentence_folder(
 
         print(f"  Word [{ref_id}]:")
 
-        # Find corresponding GIFs
-        gif_0_path = interp_dir / f"{ref_id}_0.gif"
-        gif_1_path = interp_dir / f"{ref_id}_1.gif"
+        # Find corresponding GIFs (allow fallback without trailing suffix)
+        gif_0_path, gif_1_path, fallback = resolve_gif_paths(ref_id, interp_dir)
+        if fallback:
+            print(f"    [INFO] Using GIFs resolved from '{fallback}'")
 
         # Output path
         output_path = sentence_out_dir / f"{ref_id}_complete.mp4"
@@ -367,6 +368,28 @@ def get_sentence_folders(root: Path, subfolder: Optional[str]) -> List[Path]:
         return [target]
 
     return sorted([d for d in root.iterdir() if d.is_dir()])
+
+
+def resolve_gif_paths(ref_id: str, interp_dir: Path) -> Tuple[Path, Path, Optional[str]]:
+    """
+    Resolve GIF paths, allowing fallback when word video names include a trailing suffix (e.g., _hiya).
+    Returns (gif0_path, gif1_path, fallback_ref_used or None).
+    """
+    candidates = [ref_id]
+    if "_" in ref_id:
+        base = ref_id.rsplit("_", 1)[0]
+        if base and base not in candidates:
+            candidates.append(base)
+
+    for candidate in candidates:
+        gif0 = interp_dir / f"{candidate}_0.gif"
+        gif1 = interp_dir / f"{candidate}_1.gif"
+        if gif0.exists() and gif1.exists():
+            return gif0, gif1, (candidate if candidate != ref_id else None)
+
+    # Default to the first candidate (likely missing; caller logs error)
+    first = candidates[0]
+    return interp_dir / f"{first}_0.gif", interp_dir / f"{first}_1.gif", None
 
 
 def main() -> None:
@@ -425,6 +448,6 @@ if __name__ == "__main__":
     main()
 
 # Example usage:
-# python scripts/word/combine_word_with_interp.py --word-videos-root output/word_level/word_videos --interp-root output/word_level/interp_512x320 --out-root output/word_level/word_videos_complete --fps 25
+# python scripts/word/combine_word_with_interp.py --word-videos-root output/word_level/word_videos --interp-root output/word_level/interp_576x576 --out-root output/word_level/word_videos_complete --fps 25
 # With verbose mode (adds [PRE], [WORD], [POST] labels):
 # python scripts/word/combine_word_with_interp.py --word-videos-root output/word_level/word_videos --interp-root output/word_level/interp --out-root output/word_level/word_videos_complete --fps 5 --verbose
